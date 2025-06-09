@@ -1,0 +1,15 @@
+# Dataset and training results
+dataset/
+results/
+logs/
+
+# PyTorch model checkpoints
+*.pt
+*.pth
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter checkpoints (if any)
+.ipynb_checkpoints/
