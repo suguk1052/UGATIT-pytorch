@@ -87,4 +87,8 @@ If you'd like to test or reproduce the results, follow the setup below.
 ```bash
 conda create -n ugatit python=3.6.9 -y
 conda activate ugatit
+
+git clone https://github.com/suguk1052/UGATIT-pytorch.git
+cd UGATIT-pytorch
+
 pip install -r requirements.txt
