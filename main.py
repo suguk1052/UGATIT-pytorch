@@ -35,6 +35,8 @@ def parse_args():
     parser.add_argument('--device', type=str, default='cuda', choices=['cpu', 'cuda'], help='Set gpu mode; [cpu, cuda]')
     parser.add_argument('--benchmark_flag', type=str2bool, default=False)
     parser.add_argument('--resume', type=str2bool, default=False)
+    parser.add_argument('--resume_iter', type=int, default=0,
+                        help='The iteration of checkpoints to load for testing')
 
     return check_args(parser.parse_args())
 
