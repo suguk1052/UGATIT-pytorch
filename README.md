@@ -41,6 +41,7 @@ The results of the paper came from the **Tensorflow code**
 ```
 > python main.py --dataset selfie2anime
 ```
+* To train with a rectangular resolution, pass `--aspect_ratio 2.3` (or your desired ratio).
 * If the memory of gpu is **not sufficient**, set `--light` to True
 
 ### Test
