@@ -1,10 +1,29 @@
 import time, itertools
 from dataset import ImageFolder
 from torchvision import transforms
+from torchvision.transforms import Resize, Pad
 from torch.utils.data import DataLoader
 from networks import *
 from utils import *
 from glob import glob
+
+
+# 예: 256의 max 길이에 맞춰 비율 유지하며 resize 후 패딩
+class ResizeWithPadding:
+    def __init__(self, target_size):
+        self.target_size = target_size
+
+    def __call__(self, img):
+        w, h = img.size
+        scale = self.target_size / max(w, h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        img = img.resize((new_w, new_h))
+        pad_w = self.target_size - new_w
+        pad_h = self.target_size - new_h
+        padding = (pad_w // 2, pad_h // 2, pad_w - pad_w // 2, pad_h - pad_h // 2)
+        img = transforms.functional.pad(img, padding, fill=0)
+        return img
+
 
 class UGATIT(object) :
     def __init__(self, args):
@@ -86,14 +105,16 @@ class UGATIT(object) :
     def build_model(self):
         """ DataLoader """
         train_transform = transforms.Compose([
+            ResizeWithPadding(self.img_size),
             transforms.RandomHorizontalFlip(),
-            transforms.Resize((self.img_size + 30, self.img_size+30)),
-            transforms.RandomCrop(self.img_size),
+            # transforms.Resize((self.img_size + 30, self.img_size+30)),
+            # transforms.RandomCrop(self.img_size),
             transforms.ToTensor(),
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
         ])
         test_transform = transforms.Compose([
-            transforms.Resize((self.img_size, self.img_size)),
+            # transforms.Resize((self.img_size, self.img_size)),
+            ResizeWithPadding(self.img_size),
             transforms.ToTensor(),
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
         ])
@@ -390,29 +411,17 @@ class UGATIT(object) :
         for n, (real_A, _) in enumerate(self.testA_loader):
             real_A = real_A.to(self.device)
 
-            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
+            fake_A2B, _, _ = self.genA2B(real_A)
 
-            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
+            out_A2B = RGB2BGR(tensor2numpy(denorm(fake_A2B[0])))
 
-            A2B = np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A[0]))),
-                                  cam(tensor2numpy(fake_A2B_heatmap[0]), self.img_size),
-                                  RGB2BGR(tensor2numpy(denorm(fake_A2B[0]))),
-                                  cam(tensor2numpy(fake_A2B2A_heatmap[0]), self.img_size),
-                                  RGB2BGR(tensor2numpy(denorm(fake_A2B2A[0])))), 0)
-
-            cv2.imwrite(os.path.join(self.result_dir, self.dataset, 'test', 'A2B_%d.png' % (n + 1)), A2B * 255.0)
+            cv2.imwrite(os.path.join(self.result_dir, self.dataset, 'test', 'A2B_%d.png' % (n + 1)), out_A2B * 255.0)
 
         for n, (real_B, _) in enumerate(self.testB_loader):
             real_B = real_B.to(self.device)
 
-            fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
+            fake_B2A, _, _ = self.genB2A(real_B)
 
-            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A)
+            out_B2A = RGB2BGR(tensor2numpy(denorm(fake_B2A[0])))
 
-            B2A = np.concatenate((RGB2BGR(tensor2numpy(denorm(real_B[0]))),
-                                  cam(tensor2numpy(fake_B2A_heatmap[0]), self.img_size),
-                                  RGB2BGR(tensor2numpy(denorm(fake_B2A[0]))),
-                                  cam(tensor2numpy(fake_B2A2B_heatmap[0]), self.img_size),
-                                  RGB2BGR(tensor2numpy(denorm(fake_B2A2B[0])))), 0)
-
-            cv2.imwrite(os.path.join(self.result_dir, self.dataset, 'test', 'B2A_%d.png' % (n + 1)), B2A * 255.0)
+            cv2.imwrite(os.path.join(self.result_dir, self.dataset, 'test', 'B2A_%d.png' % (n + 1)), out_B2A * 255.0)
