@@ -1,0 +1,8 @@
+torch==1.1.0
+torchvision==0.3.0
+dominate
+tensorboardX
+scikit-image
+pillow
+numpy
+opencv-python-headless==4.5.5.64

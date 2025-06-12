@@ -1,3 +1,6 @@
+```markdown
+> **Note:** This repo is a fork of [znxlwm/UGATIT-pytorch](https://github.com/znxlwm/UGATIT-pytorch), with modifications for personal experiments and research. See below for environment setup.
+
 ## U-GAT-IT &mdash; Official PyTorch Implementation
 ### : Unsupervised Generative Attentional Networks with Adaptive Layer-Instance Normalization for Image-to-Image Translation
 
@@ -72,3 +75,17 @@ The results of the paper came from the **Tensorflow code**
 <div align="center">
   <img src = './assets/kid.png' width = '787px' height = '344px'>
 </div>
+
+---
+
+## 🛠️ Local Setup (for forked repo by @suguk1052)
+
+This fork includes minor modifications and experiments.
+If you'd like to test or reproduce the results, follow the setup below.
+
+### ✅ Conda-based Environment Setup
+
+```bash
+conda create -n ugatit python=3.6.9 -y
+conda activate ugatit
+pip install -r requirements.txt
