@@ -47,6 +47,7 @@ class UGATIT(object) :
         self.device = args.device
         self.benchmark_flag = args.benchmark_flag
         self.resume = args.resume
+        self.resume_iter = args.resume_iter
 
         if torch.backends.cudnn.enabled and self.benchmark_flag:
             print('set benchmark !')
@@ -364,15 +365,26 @@ class UGATIT(object) :
         self.disLB.load_state_dict(params['disLB'])
 
     def test(self):
-        model_list = glob(os.path.join(self.result_dir, self.dataset, 'model', '*.pt'))
-        if not len(model_list) == 0:
-            model_list.sort()
-            iter = int(model_list[-1].split('_')[-1].split('.')[0])
-            self.load(os.path.join(self.result_dir, self.dataset, 'model'), iter)
-            print(" [*] Load SUCCESS")
+        if self.resume_iter > 0:
+            checkpoint_path = os.path.join(self.result_dir, self.dataset, 'model',
+                                           self.dataset + '_params_%07d.pt' % self.resume_iter)
+            if os.path.exists(checkpoint_path):
+                self.load(os.path.join(self.result_dir, self.dataset, 'model'), self.resume_iter)
+                print(" [*] Load SUCCESS")
+                iter = self.resume_iter
+            else:
+                print(" [*] Load FAILURE")
+                return
         else:
-            print(" [*] Load FAILURE")
-            return
+            model_list = glob(os.path.join(self.result_dir, self.dataset, 'model', '*.pt'))
+            if not len(model_list) == 0:
+                model_list.sort()
+                iter = int(model_list[-1].split('_')[-1].split('.')[0])
+                self.load(os.path.join(self.result_dir, self.dataset, 'model'), iter)
+                print(" [*] Load SUCCESS")
+            else:
+                print(" [*] Load FAILURE")
+                return
 
         self.genA2B.eval(), self.genB2A.eval()
         for n, (real_A, _) in enumerate(self.testA_loader):
@@ -382,11 +394,7 @@ class UGATIT(object) :
 
             fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
 
-            fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
-
             A2B = np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A[0]))),
-                                  cam(tensor2numpy(fake_A2A_heatmap[0]), self.img_size),
-                                  RGB2BGR(tensor2numpy(denorm(fake_A2A[0]))),
                                   cam(tensor2numpy(fake_A2B_heatmap[0]), self.img_size),
                                   RGB2BGR(tensor2numpy(denorm(fake_A2B[0]))),
                                   cam(tensor2numpy(fake_A2B2A_heatmap[0]), self.img_size),
@@ -401,11 +409,7 @@ class UGATIT(object) :
 
             fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A)
 
-            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
-
             B2A = np.concatenate((RGB2BGR(tensor2numpy(denorm(real_B[0]))),
-                                  cam(tensor2numpy(fake_B2B_heatmap[0]), self.img_size),
-                                  RGB2BGR(tensor2numpy(denorm(fake_B2B[0]))),
                                   cam(tensor2numpy(fake_B2A_heatmap[0]), self.img_size),
                                   RGB2BGR(tensor2numpy(denorm(fake_B2A[0]))),
                                   cam(tensor2numpy(fake_B2A2B_heatmap[0]), self.img_size),
