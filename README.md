@@ -92,3 +92,9 @@ git clone https://github.com/suguk1052/UGATIT-pytorch.git
 cd UGATIT-pytorch
 
 pip install -r requirements.txt
+```
+
+* To train with a rectangular resolution, set `--aspect_ratio <width/height>`.
+  The resulting width `img_size * aspect_ratio` must be divisible by 4.
+  For example, a 1:2.3 ratio is approximated with `--aspect_ratio 0.44` when
+  using the default `--img_size 256`.

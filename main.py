@@ -28,7 +28,8 @@ def parse_args():
     parser.add_argument('--n_res', type=int, default=4, help='The number of resblock')
     parser.add_argument('--n_dis', type=int, default=6, help='The number of discriminator layer')
 
-    parser.add_argument('--img_size', type=int, default=256, help='The size of image')
+    parser.add_argument('--img_size', type=int, default=256, help='Image height')
+    parser.add_argument('--aspect_ratio', type=float, default=1.0, help='Width / height ratio')
     parser.add_argument('--img_ch', type=int, default=3, help='The size of image channel')
 
     parser.add_argument('--result_dir', type=str, default='results', help='Directory name to save the results')
@@ -38,7 +39,9 @@ def parse_args():
     parser.add_argument('--resume_iter', type=int, default=0,
                         help='The iteration of checkpoints to load for testing')
 
-    return check_args(parser.parse_args())
+    args = parser.parse_args()
+    args.img_w = int(args.img_size * args.aspect_ratio)
+    return check_args(args)
 
 """checking arguments"""
 def check_args(args):
@@ -58,6 +61,8 @@ def check_args(args):
         assert args.batch_size >= 1
     except:
         print('batch size must be larger than or equal to one')
+    if args.img_w % 4 != 0:
+        raise ValueError('img_size * aspect_ratio must be divisible by 4')
     return args
 
 """main"""

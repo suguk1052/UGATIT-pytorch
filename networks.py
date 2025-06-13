@@ -4,14 +4,16 @@ from torch.nn.parameter import Parameter
 
 
 class ResnetGenerator(nn.Module):
-    def __init__(self, input_nc, output_nc, ngf=64, n_blocks=6, img_size=256, light=False):
+    def __init__(self, input_nc, output_nc, ngf=64, n_blocks=6,
+                 img_height=256, img_width=256, light=False):
         assert(n_blocks >= 0)
         super(ResnetGenerator, self).__init__()
         self.input_nc = input_nc
         self.output_nc = output_nc
         self.ngf = ngf
         self.n_blocks = n_blocks
-        self.img_size = img_size
+        self.img_height = img_height
+        self.img_width = img_width
         self.light = light
 
         DownBlock = []
@@ -47,7 +49,8 @@ class ResnetGenerator(nn.Module):
                   nn.Linear(ngf * mult, ngf * mult, bias=False),
                   nn.ReLU(True)]
         else:
-            FC = [nn.Linear(img_size // mult * img_size // mult * ngf * mult, ngf * mult, bias=False),
+            fc_in = (img_height // mult) * (img_width // mult) * ngf * mult
+            FC = [nn.Linear(fc_in, ngf * mult, bias=False),
                   nn.ReLU(True),
                   nn.Linear(ngf * mult, ngf * mult, bias=False),
                   nn.ReLU(True)]
