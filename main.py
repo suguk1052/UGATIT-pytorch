@@ -61,6 +61,8 @@ def check_args(args):
         assert args.batch_size >= 1
     except:
         print('batch size must be larger than or equal to one')
+    if args.img_w % 4 != 0:
+        raise ValueError('img_size * aspect_ratio must be divisible by 4')
     return args
 
 """main"""
