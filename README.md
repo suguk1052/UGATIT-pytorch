@@ -42,6 +42,13 @@ The results of the paper came from the **Tensorflow code**
 > python main.py --dataset selfie2anime
 ```
 * If the memory of gpu is **not sufficient**, set `--light` to True
+* Style diversity can be controlled with `--style_dim` and `--ds_weight`
+* To train with a rectangular resolution, set `--aspect_ratio <width/height>`.
+  The resulting width `img_size * aspect_ratio` must be divisible by 4.
+  For example, a 1:2.3 ratio is approximated with `--aspect_ratio 0.44` when
+  using the default `--img_size 256`.
+* Adjust global vs. local discriminator losses with `--global_dis_ratio <0~1>`.
+  The local ratio is `1 - global_dis_ratio`.
 
 ### Test
 ```
@@ -77,6 +84,12 @@ The results of the paper came from the **Tensorflow code**
 
 ---
 
+## 🛠️ Key Modifications
+
+* `--aspect_ratio` option for non-square training resolutions
+* `--global_dis_ratio` to balance global and local discriminators
+* Style diversity via `--style_dim` and `--ds_weight`
+
 ## 🛠️ Local Setup (for forked repo by @suguk1052)
 
 This fork includes minor modifications and experiments.
@@ -93,10 +106,3 @@ cd UGATIT-pytorch
 
 pip install -r requirements.txt
 ```
-
-* To train with a rectangular resolution, set `--aspect_ratio <width/height>`.
-  The resulting width `img_size * aspect_ratio` must be divisible by 4.
-  For example, a 1:2.3 ratio is approximated with `--aspect_ratio 0.44` when
-  using the default `--img_size 256`.
-* Adjust global vs. local discriminator losses with `--global_dis_ratio <0~1>`.
-  The local ratio is `1 - global_dis_ratio`.

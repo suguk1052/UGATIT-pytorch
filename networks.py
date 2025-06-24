@@ -5,7 +5,7 @@ from torch.nn.parameter import Parameter
 
 class ResnetGenerator(nn.Module):
     def __init__(self, input_nc, output_nc, ngf=64, n_blocks=6,
-                 img_height=256, img_width=256, light=False):
+                 img_height=256, img_width=256, light=False, style_dim=8):
         assert(n_blocks >= 0)
         super(ResnetGenerator, self).__init__()
         self.input_nc = input_nc
@@ -15,6 +15,7 @@ class ResnetGenerator(nn.Module):
         self.img_height = img_height
         self.img_width = img_width
         self.light = light
+        self.style_dim = style_dim
 
         DownBlock = []
         DownBlock += [nn.ReflectionPad2d(3),
@@ -42,7 +43,7 @@ class ResnetGenerator(nn.Module):
         self.conv1x1 = nn.Conv2d(ngf * mult * 2, ngf * mult, kernel_size=1, stride=1, bias=True)
         self.relu = nn.ReLU(True)
 
-        # Gamma, Beta block
+        # Gamma, Beta block with style embedding
         if self.light:
             FC = [nn.Linear(ngf * mult, ngf * mult, bias=False),
                   nn.ReLU(True),
@@ -54,8 +55,9 @@ class ResnetGenerator(nn.Module):
                   nn.ReLU(True),
                   nn.Linear(ngf * mult, ngf * mult, bias=False),
                   nn.ReLU(True)]
-        self.gamma = nn.Linear(ngf * mult, ngf * mult, bias=False)
-        self.beta = nn.Linear(ngf * mult, ngf * mult, bias=False)
+        self.style_fc = nn.Linear(self.style_dim, ngf * mult, bias=False)
+        self.gamma = nn.Linear(ngf * mult * 2, ngf * mult, bias=False)
+        self.beta = nn.Linear(ngf * mult * 2, ngf * mult, bias=False)
 
         # Up-Sampling Bottleneck
         for i in range(n_blocks):
@@ -79,7 +81,7 @@ class ResnetGenerator(nn.Module):
         self.FC = nn.Sequential(*FC)
         self.UpBlock2 = nn.Sequential(*UpBlock2)
 
-    def forward(self, input):
+    def forward(self, input, z=None):
         x = self.DownBlock(input)
 
         gap = torch.nn.functional.adaptive_avg_pool2d(x, 1)
@@ -103,7 +105,12 @@ class ResnetGenerator(nn.Module):
             x_ = self.FC(x_.view(x_.shape[0], -1))
         else:
             x_ = self.FC(x.view(x.shape[0], -1))
-        gamma, beta = self.gamma(x_), self.beta(x_)
+
+        if z is None:
+            z = torch.randn(x_.size(0), self.style_dim, device=x.device)
+        style = self.style_fc(z)
+        x_cat = torch.cat([x_, style], dim=1)
+        gamma, beta = self.gamma(x_cat), self.beta(x_cat)
 
 
         for i in range(self.n_blocks):

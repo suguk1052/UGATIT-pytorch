@@ -39,6 +39,9 @@ class UGATIT(object) :
         self.global_dis_ratio = args.global_dis_ratio
         self.local_dis_ratio = 1.0 - self.global_dis_ratio
 
+        self.style_dim = args.style_dim
+        self.ds_weight = args.ds_weight
+
         """ Generator """
         self.n_res = args.n_res
 
@@ -86,6 +89,8 @@ class UGATIT(object) :
         print("# cam_weight : ", self.cam_weight)
         print("# global_dis_ratio : ", self.global_dis_ratio)
         print("# local_dis_ratio : ", self.local_dis_ratio)
+        print("# style_dim : ", self.style_dim)
+        print("# ds_weight : ", self.ds_weight)
 
     ##################################################################################
     # Model
@@ -120,10 +125,10 @@ class UGATIT(object) :
         """ Define Generator, Discriminator """
         self.genA2B = ResnetGenerator(input_nc=3, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
                                       img_height=self.img_size, img_width=self.img_w,
-                                      light=self.light).to(self.device)
+                                      light=self.light, style_dim=self.style_dim).to(self.device)
         self.genB2A = ResnetGenerator(input_nc=3, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
                                       img_height=self.img_size, img_width=self.img_w,
-                                      light=self.light).to(self.device)
+                                      light=self.light, style_dim=self.style_dim).to(self.device)
         self.disGA = Discriminator(input_nc=3, ndf=self.ch, n_layers=7).to(self.device)
         self.disGB = Discriminator(input_nc=3, ndf=self.ch, n_layers=7).to(self.device)
         self.disLA = Discriminator(input_nc=3, ndf=self.ch, n_layers=5).to(self.device)
@@ -249,6 +254,17 @@ class UGATIT(object) :
             G_cam_loss_A = self.BCE_loss(fake_B2A_cam_logit, torch.ones_like(fake_B2A_cam_logit).to(self.device)) + self.BCE_loss(fake_A2A_cam_logit, torch.zeros_like(fake_A2A_cam_logit).to(self.device))
             G_cam_loss_B = self.BCE_loss(fake_A2B_cam_logit, torch.ones_like(fake_A2B_cam_logit).to(self.device)) + self.BCE_loss(fake_B2B_cam_logit, torch.zeros_like(fake_B2B_cam_logit).to(self.device))
 
+            # Diversity sensitive loss
+            z_a1 = torch.randn(real_A.size(0), self.style_dim, device=self.device)
+            z_a2 = torch.randn(real_A.size(0), self.style_dim, device=self.device)
+            ds_A1, _, _ = self.genA2B(real_A, z_a1)
+            ds_A2, _, _ = self.genA2B(real_A, z_a2)
+            z_b1 = torch.randn(real_B.size(0), self.style_dim, device=self.device)
+            z_b2 = torch.randn(real_B.size(0), self.style_dim, device=self.device)
+            ds_B1, _, _ = self.genB2A(real_B, z_b1)
+            ds_B2, _, _ = self.genB2A(real_B, z_b2)
+            DS_loss = -(self.L1_loss(ds_A1, ds_A2.detach()) + self.L1_loss(ds_B1, ds_B2.detach()))
+
             G_loss_A = self.adv_weight * (
                 self.global_dis_ratio * (G_ad_loss_GA + G_ad_cam_loss_GA) +
                 self.local_dis_ratio * (G_ad_loss_LA + G_ad_cam_loss_LA)) \
@@ -262,7 +278,7 @@ class UGATIT(object) :
                 + self.identity_weight * G_identity_loss_B \
                 + self.cam_weight * G_cam_loss_B
 
-            Generator_loss = G_loss_A + G_loss_B
+            Generator_loss = G_loss_A + G_loss_B + self.ds_weight * DS_loss
             Generator_loss.backward()
             self.G_optim.step()
 
