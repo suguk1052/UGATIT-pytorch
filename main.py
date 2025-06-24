@@ -26,6 +26,8 @@ def parse_args():
     parser.add_argument('--global_dis_ratio', type=float, default=0.5,
                         help='Ratio of global discriminator loss (0~1)')
 
+    parser.add_argument('--use_ds', type=str2bool, default=False,
+                        help='enable style diversity with random style vectors')
     parser.add_argument('--style_dim', type=int, default=8, help='dimension of style vector')
     parser.add_argument('--ds_weight', type=float, default=1.0, help='diversity sensitive loss weight')
 
@@ -70,6 +72,8 @@ def check_args(args):
         raise ValueError('global_dis_ratio must be between 0 and 1')
     if args.img_w % 4 != 0:
         raise ValueError('img_size * aspect_ratio must be divisible by 4')
+    if args.use_ds and args.style_dim <= 0:
+        raise ValueError('style_dim must be positive when use_ds is enabled')
     return args
 
 """main"""
