@@ -9,6 +9,14 @@ import torch
 from torch import nn
 from torchvision import models, transforms
 
+try:
+    Identity = nn.Identity  # available in newer PyTorch versions
+except AttributeError:
+    class Identity(nn.Module):
+        """Fallback identity layer for older PyTorch releases."""
+        def forward(self, x):
+            return x
+
 
 def list_image_files(directory: str) -> List[str]:
     exts = ('.jpg', '.jpeg', '.png', '.bmp')
@@ -26,9 +34,17 @@ def list_image_files_prefix(directory: str, prefix: str) -> List[str]:
 
 
 def load_inception(device: str):
-    model = models.inception_v3(weights=models.Inception_V3_Weights.IMAGENET1K_V1,
-                                transform_input=False)
-    model.fc = nn.Identity()
+    """Load InceptionV3 model for feature extraction.
+
+    Uses the new weights API when available and falls back to the legacy
+    ``pretrained=True`` argument on older ``torchvision`` versions.
+    """
+    try:
+        weights = models.Inception_V3_Weights.IMAGENET1K_V1
+        model = models.inception_v3(weights=weights, transform_input=False)
+    except AttributeError:  # older torchvision
+        model = models.inception_v3(pretrained=True, transform_input=False)
+    model.fc = Identity()
     model.eval()
     model.to(device)
     return model

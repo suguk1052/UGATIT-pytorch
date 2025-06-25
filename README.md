@@ -68,6 +68,9 @@ The script looks for real images under `dataset/YOUR_DATASET_NAME/testB` (for
 `results/YOUR_DATASET_NAME/test`. The mean KID score is printed and also saved to
 `kid_score.json`.
 
+The script automatically works with both new and old versions of `torchvision`,
+falling back to the legacy API when needed.
+
 If no generated images are found, the script will prompt you to run the test
 phase first.
 
