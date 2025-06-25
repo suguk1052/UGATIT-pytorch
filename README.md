@@ -106,3 +106,5 @@ cd UGATIT-pytorch
 
 pip install -r requirements.txt
 ```
+
+The included `eval.py` script automatically detects the torchvision API version. It uses `Inception_V3_Weights` when available and falls back to `pretrained=True` for older releases.
