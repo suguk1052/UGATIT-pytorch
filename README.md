@@ -54,6 +54,23 @@ The results of the paper came from the **Tensorflow code**
 ```
 > python main.py --dataset selfie2anime --phase test
 ```
+### KID Evaluation
+After running `main.py --phase test`, use `eval.py` to compute the KID between
+generated results and the corresponding real test images. Specify the dataset
+name and translation direction:
+
+```bash
+python eval.py --dataset YOUR_DATASET_NAME --direction A2B --num_samples 100
+```
+
+The script looks for real images under `dataset/YOUR_DATASET_NAME/testB` (for
+`A2B`) or `testA` (for `B2A`) and generated images under
+`results/YOUR_DATASET_NAME/test`. The mean KID score is printed and also saved to
+`kid_score.json`.
+
+If no generated images are found, the script will prompt you to run the test
+phase first.
+
 
 ## Architecture
 <div align="center">
