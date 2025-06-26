@@ -106,3 +106,10 @@ cd UGATIT-pytorch
 
 pip install -r requirements.txt
 ```
+
+### KID Evaluation
+After running `main.py --phase test`, compute the score:
+```bash
+python eval.py --dataset YOUR_DATASET_NAME --direction A2B --num_samples 100
+```
+Results are written to `results/YOUR_DATASET_NAME/eval/`.
