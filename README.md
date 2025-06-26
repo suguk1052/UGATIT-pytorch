@@ -65,8 +65,9 @@ python eval.py --dataset YOUR_DATASET_NAME --direction A2B --num_samples 100
 
 The script looks for real images under `dataset/YOUR_DATASET_NAME/testB` (for
 `A2B`) or `testA` (for `B2A`) and generated images under
-`results/YOUR_DATASET_NAME/test`. The mean KID score is printed and also saved to
-`kid_score.json`.
+`results/YOUR_DATASET_NAME/test`. The mean KID score is printed and saved to
+`results/YOUR_DATASET_NAME/eval/kid_score_<direction>.json` (e.g.
+`kid_score_A2B.json`).
 
 The script automatically works with both new and old versions of `torchvision`,
 falling back to the legacy API when needed.

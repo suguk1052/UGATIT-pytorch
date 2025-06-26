@@ -103,7 +103,8 @@ def main():
     parser.add_argument('--num_samples', type=int, default=100,
                         help='Number of images to evaluate')
     parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--output', default='kid_score.json', help='Output JSON file')
+    parser.add_argument('--output', default=None,
+                        help='Optional path to save the result JSON')
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -136,6 +137,11 @@ def main():
 
     kid_score = compute_kid(feats_fake, feats_real)
     print(f'KID score for {args.dataset} {args.direction} (mean over {args.num_samples} images): {kid_score:.6f}')
+
+    if args.output is None:
+        out_dir = os.path.join(args.result_root, args.dataset, 'eval')
+        os.makedirs(out_dir, exist_ok=True)
+        args.output = os.path.join(out_dir, f'kid_score_{args.direction}.json')
 
     with open(args.output, 'w') as f:
         json.dump({
