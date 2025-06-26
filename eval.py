@@ -34,20 +34,28 @@ def list_image_files_prefix(directory: str, prefix: str) -> List[str]:
 
 
 def load_inception(device: str):
-    """Load InceptionV3 model for feature extraction.
+    """Load InceptionV3 model and the associated preprocessing transforms.
 
-    Uses the new weights API when available and falls back to the legacy
-    ``pretrained=True`` argument on older ``torchvision`` versions.
+    When running on newer ``torchvision`` versions, the function uses the
+    ``Inception_V3_Weights`` utility so that inputs are normalized exactly as
+    expected by the pretrained weights. On older releases, it falls back to
+    ``pretrained=True`` and a manual transform matching common practice.
     """
     try:
         weights = models.Inception_V3_Weights.IMAGENET1K_V1
-        model = models.inception_v3(weights=weights, transform_input=False)
+        model = models.inception_v3(weights=weights)
+        transform = weights.transforms()
     except AttributeError:  # older torchvision
-        model = models.inception_v3(pretrained=True, transform_input=False)
+        model = models.inception_v3(pretrained=True, transform_input=True)
+        transform = transforms.Compose([
+            transforms.Resize(299),
+            transforms.CenterCrop(299),
+            transforms.ToTensor(),
+        ])
     model.fc = Identity()
     model.eval()
     model.to(device)
-    return model
+    return model, transform
 
 
 def extract_features(paths: List[str], model: nn.Module, device: str,
@@ -99,12 +107,6 @@ def main():
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    transform = transforms.Compose([
-        transforms.Resize(299),
-        transforms.CenterCrop(299),
-        transforms.ToTensor(),
-        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
-    ])
 
     real_dir = os.path.join(args.dataset_root, args.dataset,
                             'testB' if args.direction == 'A2B' else 'testA')
@@ -127,7 +129,7 @@ def main():
     real_paths = real_paths[:args.num_samples]
     fake_paths = fake_paths[:args.num_samples]
 
-    model = load_inception(device)
+    model, transform = load_inception(device)
 
     feats_real = extract_features(real_paths, model, device, args.batch_size, transform)
     feats_fake = extract_features(fake_paths, model, device, args.batch_size, transform)
