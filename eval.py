@@ -130,6 +130,9 @@ def main():
     real_paths = real_paths[:args.num_samples]
     fake_paths = fake_paths[:args.num_samples]
 
+    print(f'Computing KID for {args.dataset} {args.direction} on '
+          f'{args.num_samples} images...')
+
     model, transform = load_inception(device)
 
     feats_real = extract_features(real_paths, model, device, args.batch_size, transform)

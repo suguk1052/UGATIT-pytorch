@@ -69,6 +69,9 @@ The script looks for real images under `dataset/YOUR_DATASET_NAME/testB` (for
 `results/YOUR_DATASET_NAME/eval/kid_score_<direction>.json` (e.g.
 `kid_score_A2B.json`).
 
+You'll see a "Computing KID..." message once evaluation begins so that you know
+the metric is being processed.
+
 The script automatically works with both new and old versions of `torchvision`,
 falling back to the legacy API when needed.
 
