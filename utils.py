@@ -3,7 +3,7 @@ import os
 import cv2
 import torch
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from torchvision.transforms import functional as TF
 
 def load_test_data(image_path, size=256):
@@ -75,7 +75,7 @@ def RGB2BGR(x):
 class ResizePad:
     """Resize keeping aspect ratio and pad to target size with gray color."""
 
-    def __init__(self, size, fill=(128, 128, 128)):
+    def __init__(self, size, fill=128):
         if isinstance(size, int):
             size = (size, size)
         self.size = size  # (h, w)
@@ -93,5 +93,6 @@ class ResizePad:
         pad_top = (target_h - new_h) // 2
         pad_right = target_w - new_w - pad_left
         pad_bottom = target_h - new_h - pad_top
-        img = TF.pad(img, [pad_left, pad_top, pad_right, pad_bottom], fill=self.fill)
+        padding = (pad_left, pad_top, pad_right, pad_bottom)
+        img = ImageOps.expand(img, border=padding, fill=self.fill)
         return img
