@@ -45,8 +45,6 @@ def parse_args():
     parser.add_argument('--resume', type=str2bool, default=False)
     parser.add_argument('--resume_iter', type=int, default=0,
                         help='The iteration of checkpoints to load for testing')
-    parser.add_argument('--amp', type=str2bool, default=False,
-                        help='enable automatic mixed precision')
     parser.add_argument('--use_checkpoint', type=str2bool, default=False,
                         help='enable gradient checkpointing')
 

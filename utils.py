@@ -94,5 +94,8 @@ class ResizePad:
         pad_right = target_w - new_w - pad_left
         pad_bottom = target_h - new_h - pad_top
         padding = (pad_left, pad_top, pad_right, pad_bottom)
-        img = ImageOps.expand(img, border=padding, fill=self.fill)
+        fill = self.fill
+        if isinstance(fill, int) and img.mode in ("RGB", "RGBA"):
+            fill = (fill,) * len(img.getbands())
+        img = ImageOps.expand(img, border=padding, fill=fill)
         return img

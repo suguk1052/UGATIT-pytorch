@@ -6,31 +6,6 @@ from networks import *
 from utils import *
 from utils import ResizePad
 try:
-    from torch.cuda.amp import autocast, GradScaler
-    _AMP_AVAILABLE = True
-except Exception:  # older PyTorch
-    from contextlib import contextmanager
-
-    @contextmanager
-    def autocast(enabled=True):
-        yield
-
-    class GradScaler:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def scale(self, outputs):
-            return outputs
-
-        def step(self, optimizer):
-            optimizer.step()
-
-        def update(self):
-            pass
-
-    _AMP_AVAILABLE = False
-
-try:
     import torch.utils.checkpoint as checkpoint
     _CHECKPOINT_AVAILABLE = True
 except Exception:
@@ -89,11 +64,8 @@ class UGATIT(object) :
         self.benchmark_flag = args.benchmark_flag
         self.resume = args.resume
         self.resume_iter = args.resume_iter
-        self.amp = args.amp and _AMP_AVAILABLE
         self.use_checkpoint = args.use_checkpoint and _CHECKPOINT_AVAILABLE
 
-        if args.amp and not _AMP_AVAILABLE:
-            print('WARNING: torch.cuda.amp is not available. AMP is disabled.')
         if args.use_checkpoint and not _CHECKPOINT_AVAILABLE:
             print('WARNING: torch.utils.checkpoint is not available. Gradient checkpointing is disabled.')
 
@@ -132,10 +104,7 @@ class UGATIT(object) :
         print("# style_dim : ", self.style_dim)
         print("# ds_weight : ", self.ds_weight)
 
-        if self.amp:
-            self.scaler = GradScaler()
-        else:
-            self.scaler = None
+
 
     def _call(self, module, *args):
         if self.use_checkpoint and _CHECKPOINT_AVAILABLE:
@@ -250,19 +219,18 @@ class UGATIT(object) :
 
             # Update D
             self.D_optim.zero_grad()
-            with autocast(enabled=self.amp):
-                fake_A2B, _, _ = self._call(self.genA2B, real_A)
-                fake_B2A, _, _ = self._call(self.genB2A, real_B)
+            fake_A2B, _, _ = self._call(self.genA2B, real_A)
+            fake_B2A, _, _ = self._call(self.genB2A, real_B)
 
-                real_GA_logit, real_GA_cam_logit, _ = self._call(self.disGA, real_A)
-                real_LA_logit, real_LA_cam_logit, _ = self._call(self.disLA, real_A)
-                real_GB_logit, real_GB_cam_logit, _ = self._call(self.disGB, real_B)
-                real_LB_logit, real_LB_cam_logit, _ = self._call(self.disLB, real_B)
+            real_GA_logit, real_GA_cam_logit, _ = self._call(self.disGA, real_A)
+            real_LA_logit, real_LA_cam_logit, _ = self._call(self.disLA, real_A)
+            real_GB_logit, real_GB_cam_logit, _ = self._call(self.disGB, real_B)
+            real_LB_logit, real_LB_cam_logit, _ = self._call(self.disLB, real_B)
 
-                fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
-                fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
-                fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B)
-                fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B)
+            fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
+            fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
+            fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B)
+            fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B)
 
             D_ad_loss_GA = self.MSE_loss(real_GA_logit, torch.ones_like(real_GA_logit).to(self.device)) + self.MSE_loss(fake_GA_logit, torch.zeros_like(fake_GA_logit).to(self.device))
             D_ad_cam_loss_GA = self.MSE_loss(real_GA_cam_logit, torch.ones_like(real_GA_cam_logit).to(self.device)) + self.MSE_loss(fake_GA_cam_logit, torch.zeros_like(fake_GA_cam_logit).to(self.device))
@@ -281,30 +249,24 @@ class UGATIT(object) :
                 self.local_dis_ratio * (D_ad_loss_LB + D_ad_cam_loss_LB))
 
             Discriminator_loss = D_loss_A + D_loss_B
-            if self.amp:
-                self.scaler.scale(Discriminator_loss).backward()
-                self.scaler.step(self.D_optim)
-                self.scaler.update()
-            else:
-                Discriminator_loss.backward()
-                self.D_optim.step()
+            Discriminator_loss.backward()
+            self.D_optim.step()
 
             # Update G
             self.G_optim.zero_grad()
-            with autocast(enabled=self.amp):
-                fake_A2B, fake_A2B_cam_logit, _ = self._call(self.genA2B, real_A)
-                fake_B2A, fake_B2A_cam_logit, _ = self._call(self.genB2A, real_B)
+            fake_A2B, fake_A2B_cam_logit, _ = self._call(self.genA2B, real_A)
+            fake_B2A, fake_B2A_cam_logit, _ = self._call(self.genB2A, real_B)
 
-                fake_A2B2A, _, _ = self._call(self.genB2A, fake_A2B)
-                fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A)
+            fake_A2B2A, _, _ = self._call(self.genB2A, fake_A2B)
+            fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A)
 
-                fake_A2A, fake_A2A_cam_logit, _ = self._call(self.genB2A, real_A)
-                fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B)
+            fake_A2A, fake_A2A_cam_logit, _ = self._call(self.genB2A, real_A)
+            fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B)
 
-                fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
-                fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
-                fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B)
-                fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B)
+            fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
+            fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
+            fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B)
+            fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B)
 
             G_ad_loss_GA = self.MSE_loss(fake_GA_logit, torch.ones_like(fake_GA_logit).to(self.device))
             G_ad_cam_loss_GA = self.MSE_loss(fake_GA_cam_logit, torch.ones_like(fake_GA_cam_logit).to(self.device))
@@ -352,13 +314,8 @@ class UGATIT(object) :
                 + self.cam_weight * G_cam_loss_B
 
             Generator_loss = G_loss_A + G_loss_B + self.ds_weight * DS_loss
-            if self.amp:
-                self.scaler.scale(Generator_loss).backward()
-                self.scaler.step(self.G_optim)
-                self.scaler.update()
-            else:
-                Generator_loss.backward()
-                self.G_optim.step()
+            Generator_loss.backward()
+            self.G_optim.step()
 
             # clip parameter of AdaILN and ILN, applied after optimizer step
             self.genA2B.apply(self.Rho_clipper)
@@ -515,8 +472,7 @@ class UGATIT(object) :
             for n, (real_A, _) in enumerate(self.testA_loader):
                 real_A = real_A.to(self.device)
 
-                with autocast(enabled=self.amp):
-                    fake_A2B, _, _ = self._call(self.genA2B, real_A)
+                fake_A2B, _, _ = self._call(self.genA2B, real_A)
 
                 out_A2B = RGB2BGR(tensor2numpy(denorm(fake_A2B[0])))
 
@@ -525,8 +481,7 @@ class UGATIT(object) :
             for n, (real_B, _) in enumerate(self.testB_loader):
                 real_B = real_B.to(self.device)
 
-                with autocast(enabled=self.amp):
-                    fake_B2A, _, _ = self._call(self.genB2A, real_B)
+                fake_B2A, _, _ = self._call(self.genB2A, real_B)
 
                 out_B2A = RGB2BGR(tensor2numpy(denorm(fake_B2A[0])))
 
