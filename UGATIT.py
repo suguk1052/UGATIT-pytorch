@@ -139,7 +139,17 @@ class UGATIT(object) :
 
     def _call(self, module, *args):
         if self.use_checkpoint and _CHECKPOINT_AVAILABLE:
-            return checkpoint.checkpoint(lambda *inputs: module(*inputs), *args)
+            tensors = []
+            new_args = []
+            for arg in args:
+                if isinstance(arg, torch.Tensor) and not arg.requires_grad:
+                    arg = arg.requires_grad_()
+                    tensors.append(arg)
+                new_args.append(arg)
+            out = checkpoint.checkpoint(lambda *inputs: module(*inputs), *new_args)
+            for t in tensors:
+                t.detach_()
+            return out
         return module(*args)
 
     ##################################################################################
