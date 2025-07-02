@@ -5,8 +5,37 @@ from torch.utils.data import DataLoader
 from networks import *
 from utils import *
 from utils import ResizePad
-from torch.cuda.amp import autocast, GradScaler
-import torch.utils.checkpoint as checkpoint
+try:
+    from torch.cuda.amp import autocast, GradScaler
+    _AMP_AVAILABLE = True
+except Exception:  # older PyTorch
+    from contextlib import contextmanager
+
+    @contextmanager
+    def autocast(enabled=True):
+        yield
+
+    class GradScaler:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def scale(self, outputs):
+            return outputs
+
+        def step(self, optimizer):
+            optimizer.step()
+
+        def update(self):
+            pass
+
+    _AMP_AVAILABLE = False
+
+try:
+    import torch.utils.checkpoint as checkpoint
+    _CHECKPOINT_AVAILABLE = True
+except Exception:
+    checkpoint = None
+    _CHECKPOINT_AVAILABLE = False
 from glob import glob
 
 
@@ -60,8 +89,13 @@ class UGATIT(object) :
         self.benchmark_flag = args.benchmark_flag
         self.resume = args.resume
         self.resume_iter = args.resume_iter
-        self.amp = args.amp
-        self.use_checkpoint = args.use_checkpoint
+        self.amp = args.amp and _AMP_AVAILABLE
+        self.use_checkpoint = args.use_checkpoint and _CHECKPOINT_AVAILABLE
+
+        if args.amp and not _AMP_AVAILABLE:
+            print('WARNING: torch.cuda.amp is not available. AMP is disabled.')
+        if args.use_checkpoint and not _CHECKPOINT_AVAILABLE:
+            print('WARNING: torch.utils.checkpoint is not available. Gradient checkpointing is disabled.')
 
         if torch.backends.cudnn.enabled and self.benchmark_flag:
             print('set benchmark !')
@@ -104,7 +138,7 @@ class UGATIT(object) :
             self.scaler = None
 
     def _call(self, module, *args):
-        if self.use_checkpoint:
+        if self.use_checkpoint and _CHECKPOINT_AVAILABLE:
             return checkpoint.checkpoint(lambda *inputs: module(*inputs), *args)
         return module(*args)
 
