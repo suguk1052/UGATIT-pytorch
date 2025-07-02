@@ -1,10 +1,12 @@
 import time, itertools
 from dataset import ImageFolder
 from torchvision import transforms
-from torchvision.transforms import Resize
 from torch.utils.data import DataLoader
 from networks import *
 from utils import *
+from utils import ResizePad
+from torch.cuda.amp import autocast, GradScaler
+import torch.utils.checkpoint as checkpoint
 from glob import glob
 
 
@@ -58,6 +60,8 @@ class UGATIT(object) :
         self.benchmark_flag = args.benchmark_flag
         self.resume = args.resume
         self.resume_iter = args.resume_iter
+        self.amp = args.amp
+        self.use_checkpoint = args.use_checkpoint
 
         if torch.backends.cudnn.enabled and self.benchmark_flag:
             print('set benchmark !')
@@ -94,6 +98,16 @@ class UGATIT(object) :
         print("# style_dim : ", self.style_dim)
         print("# ds_weight : ", self.ds_weight)
 
+        if self.amp:
+            self.scaler = GradScaler()
+        else:
+            self.scaler = None
+
+    def _call(self, module, *args):
+        if self.use_checkpoint:
+            return checkpoint.checkpoint(lambda *inputs: module(*inputs), *args)
+        return module(*args)
+
     ##################################################################################
     # Model
     ##################################################################################
@@ -101,7 +115,7 @@ class UGATIT(object) :
     def build_model(self):
         """ DataLoader """
         train_transform = transforms.Compose([
-            Resize((self.img_size, self.img_w)),
+            ResizePad((self.img_size, self.img_w)),
             transforms.RandomHorizontalFlip(),
             # transforms.Resize((self.img_size + 30, self.img_size+30)),
             # transforms.RandomCrop(self.img_size),
@@ -109,8 +123,7 @@ class UGATIT(object) :
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
         ])
         test_transform = transforms.Compose([
-            # transforms.Resize((self.img_size, self.img_size)),
-            Resize((self.img_size, self.img_w)),
+            ResizePad((self.img_size, self.img_w)),
             transforms.ToTensor(),
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
         ])
@@ -168,6 +181,10 @@ class UGATIT(object) :
         # training loop
         print('training start !')
         start_time = time.time()
+        trainA_iter = iter(self.trainA_loader)
+        trainB_iter = iter(self.trainB_loader)
+        testA_iter = iter(self.testA_loader)
+        testB_iter = iter(self.testB_loader)
         for step in range(start_iter, self.iteration + 1):
             if self.decay_flag and step > (self.iteration // 2):
                 self.G_optim.param_groups[0]['lr'] -= (self.lr / (self.iteration // 2))
@@ -189,19 +206,19 @@ class UGATIT(object) :
 
             # Update D
             self.D_optim.zero_grad()
+            with autocast(enabled=self.amp):
+                fake_A2B, _, _ = self._call(self.genA2B, real_A)
+                fake_B2A, _, _ = self._call(self.genB2A, real_B)
 
-            fake_A2B, _, _ = self.genA2B(real_A)
-            fake_B2A, _, _ = self.genB2A(real_B)
+                real_GA_logit, real_GA_cam_logit, _ = self._call(self.disGA, real_A)
+                real_LA_logit, real_LA_cam_logit, _ = self._call(self.disLA, real_A)
+                real_GB_logit, real_GB_cam_logit, _ = self._call(self.disGB, real_B)
+                real_LB_logit, real_LB_cam_logit, _ = self._call(self.disLB, real_B)
 
-            real_GA_logit, real_GA_cam_logit, _ = self.disGA(real_A)
-            real_LA_logit, real_LA_cam_logit, _ = self.disLA(real_A)
-            real_GB_logit, real_GB_cam_logit, _ = self.disGB(real_B)
-            real_LB_logit, real_LB_cam_logit, _ = self.disLB(real_B)
-
-            fake_GA_logit, fake_GA_cam_logit, _ = self.disGA(fake_B2A)
-            fake_LA_logit, fake_LA_cam_logit, _ = self.disLA(fake_B2A)
-            fake_GB_logit, fake_GB_cam_logit, _ = self.disGB(fake_A2B)
-            fake_LB_logit, fake_LB_cam_logit, _ = self.disLB(fake_A2B)
+                fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
+                fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
+                fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B)
+                fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B)
 
             D_ad_loss_GA = self.MSE_loss(real_GA_logit, torch.ones_like(real_GA_logit).to(self.device)) + self.MSE_loss(fake_GA_logit, torch.zeros_like(fake_GA_logit).to(self.device))
             D_ad_cam_loss_GA = self.MSE_loss(real_GA_cam_logit, torch.ones_like(real_GA_cam_logit).to(self.device)) + self.MSE_loss(fake_GA_cam_logit, torch.zeros_like(fake_GA_cam_logit).to(self.device))
@@ -220,25 +237,30 @@ class UGATIT(object) :
                 self.local_dis_ratio * (D_ad_loss_LB + D_ad_cam_loss_LB))
 
             Discriminator_loss = D_loss_A + D_loss_B
-            Discriminator_loss.backward()
-            self.D_optim.step()
+            if self.amp:
+                self.scaler.scale(Discriminator_loss).backward()
+                self.scaler.step(self.D_optim)
+                self.scaler.update()
+            else:
+                Discriminator_loss.backward()
+                self.D_optim.step()
 
             # Update G
             self.G_optim.zero_grad()
+            with autocast(enabled=self.amp):
+                fake_A2B, fake_A2B_cam_logit, _ = self._call(self.genA2B, real_A)
+                fake_B2A, fake_B2A_cam_logit, _ = self._call(self.genB2A, real_B)
 
-            fake_A2B, fake_A2B_cam_logit, _ = self.genA2B(real_A)
-            fake_B2A, fake_B2A_cam_logit, _ = self.genB2A(real_B)
+                fake_A2B2A, _, _ = self._call(self.genB2A, fake_A2B)
+                fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A)
 
-            fake_A2B2A, _, _ = self.genB2A(fake_A2B)
-            fake_B2A2B, _, _ = self.genA2B(fake_B2A)
+                fake_A2A, fake_A2A_cam_logit, _ = self._call(self.genB2A, real_A)
+                fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B)
 
-            fake_A2A, fake_A2A_cam_logit, _ = self.genB2A(real_A)
-            fake_B2B, fake_B2B_cam_logit, _ = self.genA2B(real_B)
-
-            fake_GA_logit, fake_GA_cam_logit, _ = self.disGA(fake_B2A)
-            fake_LA_logit, fake_LA_cam_logit, _ = self.disLA(fake_B2A)
-            fake_GB_logit, fake_GB_cam_logit, _ = self.disGB(fake_A2B)
-            fake_LB_logit, fake_LB_cam_logit, _ = self.disLB(fake_A2B)
+                fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
+                fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
+                fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B)
+                fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B)
 
             G_ad_loss_GA = self.MSE_loss(fake_GA_logit, torch.ones_like(fake_GA_logit).to(self.device))
             G_ad_cam_loss_GA = self.MSE_loss(fake_GA_cam_logit, torch.ones_like(fake_GA_cam_logit).to(self.device))
@@ -262,12 +284,12 @@ class UGATIT(object) :
                 # Diversity sensitive loss
                 z_a1 = torch.randn(real_A.size(0), self.style_dim, device=self.device)
                 z_a2 = torch.randn(real_A.size(0), self.style_dim, device=self.device)
-                ds_A1, _, _ = self.genA2B(real_A, z_a1)
-                ds_A2, _, _ = self.genA2B(real_A, z_a2)
+                ds_A1, _, _ = self._call(self.genA2B, real_A, z_a1)
+                ds_A2, _, _ = self._call(self.genA2B, real_A, z_a2)
                 z_b1 = torch.randn(real_B.size(0), self.style_dim, device=self.device)
                 z_b2 = torch.randn(real_B.size(0), self.style_dim, device=self.device)
-                ds_B1, _, _ = self.genB2A(real_B, z_b1)
-                ds_B2, _, _ = self.genB2A(real_B, z_b2)
+                ds_B1, _, _ = self._call(self.genB2A, real_B, z_b1)
+                ds_B2, _, _ = self._call(self.genB2A, real_B, z_b2)
                 DS_loss = -(self.L1_loss(ds_A1, ds_A2.detach()) + self.L1_loss(ds_B1, ds_B2.detach()))
             else:
                 DS_loss = torch.tensor(0.0, device=self.device)
@@ -286,8 +308,13 @@ class UGATIT(object) :
                 + self.cam_weight * G_cam_loss_B
 
             Generator_loss = G_loss_A + G_loss_B + self.ds_weight * DS_loss
-            Generator_loss.backward()
-            self.G_optim.step()
+            if self.amp:
+                self.scaler.scale(Generator_loss).backward()
+                self.scaler.step(self.G_optim)
+                self.scaler.update()
+            else:
+                Generator_loss.backward()
+                self.G_optim.step()
 
             # clip parameter of AdaILN and ILN, applied after optimizer step
             self.genA2B.apply(self.Rho_clipper)
@@ -444,7 +471,8 @@ class UGATIT(object) :
             for n, (real_A, _) in enumerate(self.testA_loader):
                 real_A = real_A.to(self.device)
 
-                fake_A2B, _, _ = self.genA2B(real_A)
+                with autocast(enabled=self.amp):
+                    fake_A2B, _, _ = self._call(self.genA2B, real_A)
 
                 out_A2B = RGB2BGR(tensor2numpy(denorm(fake_A2B[0])))
 
@@ -453,7 +481,8 @@ class UGATIT(object) :
             for n, (real_B, _) in enumerate(self.testB_loader):
                 real_B = real_B.to(self.device)
 
-                fake_B2A, _, _ = self.genB2A(real_B)
+                with autocast(enabled=self.amp):
+                    fake_B2A, _, _ = self._call(self.genB2A, real_B)
 
                 out_B2A = RGB2BGR(tensor2numpy(denorm(fake_B2A[0])))
 

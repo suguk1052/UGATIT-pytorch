@@ -43,6 +43,7 @@ The results of the paper came from the **Tensorflow code**
 ```
 * If the memory of gpu is **not sufficient**, set `--light` to True
 * Enable style diversity with `--use_ds` (see `--style_dim` and `--ds_weight`)
+* Save memory with `--amp` for mixed precision and `--use_checkpoint` for gradient checkpointing
 * To train with a rectangular resolution, set `--aspect_ratio <width/height>`.
   The resulting width `img_size * aspect_ratio` must be divisible by 4.
   For example, a 1:2.3 ratio is approximated with `--aspect_ratio 0.44` when
@@ -89,6 +90,7 @@ The results of the paper came from the **Tensorflow code**
 * `--aspect_ratio` option for non-square training resolutions
 * `--global_dis_ratio` to balance global and local discriminators
 * Optional style diversity via `--use_ds`, `--style_dim`, and `--ds_weight`
+* Automatic mixed precision with `--amp` and gradient checkpointing via `--use_checkpoint`
 
 ## 🛠️ Local Setup (for forked repo by @suguk1052)
 
