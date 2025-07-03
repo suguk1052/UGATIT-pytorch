@@ -91,6 +91,7 @@ The results of the paper came from the **Tensorflow code**
 * `--global_dis_ratio` to balance global and local discriminators
 * Optional style diversity via `--use_ds`, `--style_dim`, and `--ds_weight`
 * Gradient checkpointing via `--use_checkpoint`
+* Optional center cropping via `--center_crop` to keep aspect ratio without padding
 
 ## 🛠️ Local Setup (for forked repo by @suguk1052)
 
