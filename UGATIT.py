@@ -4,7 +4,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from networks import *
 from utils import *
-from utils import ResizePad
+from utils import ResizeCenterCrop
 try:
     import torch.utils.checkpoint as checkpoint
     _CHECKPOINT_AVAILABLE = True
@@ -128,7 +128,7 @@ class UGATIT(object) :
     def build_model(self):
         """ DataLoader """
         train_transform = transforms.Compose([
-            ResizePad((self.img_size, self.img_w)),
+            ResizeCenterCrop((self.img_size, self.img_w)),
             transforms.RandomHorizontalFlip(),
             # transforms.Resize((self.img_size + 30, self.img_size+30)),
             # transforms.RandomCrop(self.img_size),
@@ -136,7 +136,7 @@ class UGATIT(object) :
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
         ])
         test_transform = transforms.Compose([
-            ResizePad((self.img_size, self.img_w)),
+            ResizeCenterCrop((self.img_size, self.img_w)),
             transforms.ToTensor(),
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
         ])
