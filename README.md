@@ -114,4 +114,5 @@ After running `main.py --phase test`, compute the score:
 ```bash
 python eval.py --dataset YOUR_DATASET_NAME --direction A2B --num_samples 100
 ```
-Results are written to `results/YOUR_DATASET_NAME/eval/`.
+Results are written to `results/YOUR_DATASET_NAME/eval/` by default. Use
+`--result_dir OTHER_DIR` if your generated images live elsewhere.
