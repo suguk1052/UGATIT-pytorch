@@ -139,7 +139,12 @@ def main():
     feats_fake = extract_features(fake_paths, model, device, args.batch_size, transform)
 
     kid_score = compute_kid(feats_fake, feats_real)
-    print(f'KID score for {args.dataset} {args.direction} (mean over {args.num_samples} images): {kid_score:.6f}')
+    kid_x100 = kid_score * 100
+    print(
+        f'KID score for {args.dataset} {args.direction} '
+        f'(mean over {args.num_samples} images): '
+        f'{kid_score:.6f} ({kid_x100:.4f} x100)'
+    )
 
     if args.output is None:
         out_dir = os.path.join(args.result_dir, args.dataset, 'eval')
@@ -147,12 +152,17 @@ def main():
         args.output = os.path.join(out_dir, f'kid_score_{args.direction}.json')
 
     with open(args.output, 'w') as f:
-        json.dump({
-            'dataset': args.dataset,
-            'direction': args.direction,
-            'kid': kid_score,
-            'num_samples': args.num_samples
-        }, f, indent=2)
+        json.dump(
+            {
+                'dataset': args.dataset,
+                'direction': args.direction,
+                'kid': kid_score,
+                'kid_x100': kid_x100,
+                'num_samples': args.num_samples,
+            },
+            f,
+            indent=2,
+        )
 
 
 if __name__ == '__main__':

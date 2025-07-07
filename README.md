@@ -115,4 +115,6 @@ After running `main.py --phase test`, compute the score:
 python eval.py --dataset YOUR_DATASET_NAME --direction A2B --num_samples 100
 ```
 Results are written to `results/YOUR_DATASET_NAME/eval/` by default. Use
-`--result_dir OTHER_DIR` if your generated images live elsewhere.
+`--result_dir OTHER_DIR` if your generated images live elsewhere. The
+output JSON contains both the raw `kid` value and `kid_x100`, which is
+simply `kid` multiplied by 100 for easier viewing.
