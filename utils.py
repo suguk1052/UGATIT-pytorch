@@ -72,30 +72,25 @@ def RGB2BGR(x):
     return cv2.cvtColor(x, cv2.COLOR_RGB2BGR)
 
 
-class ResizePad:
-    """Resize keeping aspect ratio and pad to target size with gray color."""
+class ResizeCenterCrop:
+    """Resize keeping aspect ratio and center crop to target size."""
 
-    def __init__(self, size, fill=128):
+    def __init__(self, size):
         if isinstance(size, int):
             size = (size, size)
         self.size = size  # (h, w)
-        self.fill = fill
 
     def __call__(self, img: Image.Image) -> Image.Image:
         target_h, target_w = self.size
         w, h = img.size
-        scale = min(target_w / w, target_h / h)
-        new_w = int(w * scale)
-        new_h = int(h * scale)
+        scale = max(target_w / w, target_h / h)
+        new_w = int(round(w * scale))
+        new_h = int(round(h * scale))
         img = img.resize((new_w, new_h), Image.BICUBIC)
 
-        pad_left = (target_w - new_w) // 2
-        pad_top = (target_h - new_h) // 2
-        pad_right = target_w - new_w - pad_left
-        pad_bottom = target_h - new_h - pad_top
-        padding = (pad_left, pad_top, pad_right, pad_bottom)
-        fill = self.fill
-        if isinstance(fill, int) and img.mode in ("RGB", "RGBA"):
-            fill = (fill,) * len(img.getbands())
-        img = ImageOps.expand(img, border=padding, fill=fill)
+        left = max(0, (new_w - target_w) // 2)
+        top = max(0, (new_h - target_h) // 2)
+        right = left + target_w
+        bottom = top + target_h
+        img = img.crop((left, top, right, bottom))
         return img
