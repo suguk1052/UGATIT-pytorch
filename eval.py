@@ -98,8 +98,8 @@ def main():
                         help='Translation direction to evaluate')
     parser.add_argument('--dataset_root', default='dataset',
                         help='Root directory for datasets')
-    parser.add_argument('--result_root', default='results',
-                        help='Root directory for generated results')
+    parser.add_argument('--result_dir', default='results',
+                        help='Directory containing generated results')
     parser.add_argument('--num_samples', type=int, default=100,
                         help='Number of images to evaluate')
     parser.add_argument('--batch_size', type=int, default=32)
@@ -111,7 +111,7 @@ def main():
 
     real_dir = os.path.join(args.dataset_root, args.dataset,
                             'testB' if args.direction == 'A2B' else 'testA')
-    fake_dir = os.path.join(args.result_root, args.dataset, 'test')
+    fake_dir = os.path.join(args.result_dir, args.dataset, 'test')
 
     prefix = args.direction + '_'
     real_paths = list_image_files(real_dir)
@@ -139,20 +139,30 @@ def main():
     feats_fake = extract_features(fake_paths, model, device, args.batch_size, transform)
 
     kid_score = compute_kid(feats_fake, feats_real)
-    print(f'KID score for {args.dataset} {args.direction} (mean over {args.num_samples} images): {kid_score:.6f}')
+    kid_x100 = kid_score * 100
+    print(
+        f'KID score for {args.dataset} {args.direction} '
+        f'(mean over {args.num_samples} images): '
+        f'{kid_score:.6f} ({kid_x100:.4f} x100)'
+    )
 
     if args.output is None:
-        out_dir = os.path.join(args.result_root, args.dataset, 'eval')
+        out_dir = os.path.join(args.result_dir, args.dataset, 'eval')
         os.makedirs(out_dir, exist_ok=True)
         args.output = os.path.join(out_dir, f'kid_score_{args.direction}.json')
 
     with open(args.output, 'w') as f:
-        json.dump({
-            'dataset': args.dataset,
-            'direction': args.direction,
-            'kid': kid_score,
-            'num_samples': args.num_samples
-        }, f, indent=2)
+        json.dump(
+            {
+                'dataset': args.dataset,
+                'direction': args.direction,
+                'kid': kid_score,
+                'kid_x100': kid_x100,
+                'num_samples': args.num_samples,
+            },
+            f,
+            indent=2,
+        )
 
 
 if __name__ == '__main__':
