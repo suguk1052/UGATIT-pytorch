@@ -98,7 +98,11 @@ def main():
         print(" [*] Training finished!")
 
     if args.phase == 'test' :
-        gan.test()
+        try:
+            gan.test()
+        except FileNotFoundError as e:
+            print(f'Error: {e}')
+            return
         print(" [*] Test finished!")
 
 if __name__ == '__main__':
