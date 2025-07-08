@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import random
 from typing import List
 
 from PIL import Image
@@ -174,22 +173,20 @@ def main():
             f'Run "python main.py --dataset {args.dataset} --phase test" first.'
         )
 
-    # Determine how many samples to use
-    if args.num_samples is None:
-        args.num_samples = min(len(real_paths), len(fake_paths))
-    else:
-        args.num_samples = min(args.num_samples, len(real_paths), len(fake_paths))
+    if args.num_samples is not None:
+        real_paths = real_paths[: args.num_samples]
+        fake_paths = fake_paths[: args.num_samples]
 
-    if args.num_samples == 0:
+    if not real_paths or not fake_paths:
         raise ValueError('No images found for evaluation')
 
-    random.shuffle(real_paths)
-    random.shuffle(fake_paths)
-    real_paths = real_paths[:args.num_samples]
-    fake_paths = fake_paths[:args.num_samples]
+    num_real = len(real_paths)
+    num_fake = len(fake_paths)
 
-    print(f'Computing KID and FID for {args.dataset} {args.direction} on '
-          f'{args.num_samples} images...')
+    print(
+        f'Computing KID and FID for {args.dataset} {args.direction} using '
+        f'{num_fake} fake and {num_real} real images...'
+    )
 
     model, transform = load_inception(device)
 
@@ -201,12 +198,12 @@ def main():
     kid_x100 = kid_score * 100
     print(
         f'KID score for {args.dataset} {args.direction} '
-        f'(mean over {args.num_samples} images): '
+        f'(fake {num_fake} vs real {num_real}): '
         f'{kid_score:.6f} ({kid_x100:.4f} x100)'
     )
     print(
         f'FID score for {args.dataset} {args.direction} '
-        f'(mean over {args.num_samples} images): '
+        f'(fake {num_fake} vs real {num_real}): '
         f'{fid_score:.6f}'
     )
 
@@ -225,7 +222,8 @@ def main():
                 'direction': args.direction,
                 'kid': kid_score,
                 'kid_x100': kid_x100,
-                'num_samples': args.num_samples,
+                'num_fake': num_fake,
+                'num_real': num_real,
             },
             f,
             indent=2,
@@ -237,7 +235,8 @@ def main():
                 'dataset': args.dataset,
                 'direction': args.direction,
                 'fid': fid_score,
-                'num_samples': args.num_samples,
+                'num_fake': num_fake,
+                'num_real': num_real,
             },
             f,
             indent=2,

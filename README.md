@@ -118,14 +118,15 @@ After running `main.py --phase test`, compute the scores:
 ```bash
 python eval.py --dataset YOUR_DATASET_NAME --direction A2B
 ```
-Add `--num_samples N` to limit the evaluation to `N` random images. By default
-all images common to the real and generated directories are used.
+Add `--num_samples N` to limit the evaluation to at most `N` images from each
+directory. By default all available images are used with no random shuffling.
 Results are written to `results/YOUR_DATASET_NAME/eval/` by default. Use
 `--result_dir OTHER_DIR` if your generated images live elsewhere. The
 script creates `kid_score_A2B.json` and `fid_score_A2B.json` (or
 `*_B2A.json` when evaluating the opposite direction). The metrics are
 computed from the images saved under `results/YOUR_DATASET_NAME/test/A2B/`
-or `test/B2A/`. The KID file contains both the raw `kid` value and
-`kid_x100` for convenience.
+or `test/B2A/`. Each JSON also records how many real and fake images were
+used. The KID file contains both the raw `kid` value and `kid_x100` for
+convenience.
 You can also specify `--real_dir PATH` to override the directory of real
 images used as ground truth (by default it is `testB` or `testA`).
