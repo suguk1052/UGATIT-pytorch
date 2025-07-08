@@ -449,15 +449,24 @@ class UGATIT(object) :
 
     def test(self):
         if self.resume_iter > 0:
-            checkpoint_path = os.path.join(self.result_dir, self.dataset, 'model',
-                                           self.dataset + '_params_%07d.pt' % self.resume_iter)
+            checkpoint_path = os.path.join(
+                self.result_dir,
+                self.dataset,
+                'model',
+                self.dataset + '_params_%07d.pt' % self.resume_iter,
+            )
             if os.path.exists(checkpoint_path):
-                self.load(os.path.join(self.result_dir, self.dataset, 'model'), self.resume_iter)
+                self.load(
+                    os.path.join(self.result_dir, self.dataset, 'model'),
+                    self.resume_iter,
+                )
                 print(" [*] Load SUCCESS")
                 iter = self.resume_iter
             else:
-                print(" [*] Load FAILURE")
-                return
+                raise FileNotFoundError(
+                    f'Checkpoint file not found: {checkpoint_path}. '
+                    'Ensure that resume_iter matches a saved iteration.'
+                )
         else:
             model_list = glob(os.path.join(self.result_dir, self.dataset, 'model', '*.pt'))
             if not len(model_list) == 0:
