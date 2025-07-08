@@ -138,6 +138,8 @@ def main():
                         help='Translation direction to evaluate')
     parser.add_argument('--dataset_root', default='dataset',
                         help='Root directory for datasets')
+    parser.add_argument('--real_dir', default=None,
+                        help='Optional directory of real images to use as ground truth')
     parser.add_argument('--result_dir', default='results',
                         help='Directory containing generated results')
     parser.add_argument('--num_samples', type=int, default=100,
@@ -149,8 +151,14 @@ def main():
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    real_dir = os.path.join(args.dataset_root, args.dataset,
-                            'testB' if args.direction == 'A2B' else 'testA')
+    if args.real_dir is None:
+        real_dir = os.path.join(
+            args.dataset_root,
+            args.dataset,
+            'testB' if args.direction == 'A2B' else 'testA'
+        )
+    else:
+        real_dir = args.real_dir
     fake_dir = os.path.join(args.result_dir, args.dataset, 'test', args.direction)
 
     real_paths = list_image_files(real_dir)

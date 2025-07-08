@@ -125,3 +125,5 @@ script creates `kid_score_A2B.json` and `fid_score_A2B.json` (or
 computed from the images saved under `results/YOUR_DATASET_NAME/test/A2B/`
 or `test/B2A/`. The KID file contains both the raw `kid` value and
 `kid_x100` for convenience.
+You can also specify `--real_dir PATH` to override the directory of real
+images used as ground truth (by default it is `testB` or `testA`).
