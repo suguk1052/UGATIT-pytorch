@@ -110,10 +110,13 @@ def _sqrtm(mat: torch.Tensor) -> torch.Tensor:
         sqrt_m = vecs @ np.diag(np.sqrt(vals)) @ np.linalg.inv(vecs)
         if np.iscomplexobj(sqrt_m):
             sqrt_m = sqrt_m.real
-    return torch.from_numpy(sqrt_m).to(mat.device)
+    return torch.from_numpy(sqrt_m).to(mat.device).type(mat.dtype)
 
 
 def compute_fid(feats_fake: torch.Tensor, feats_real: torch.Tensor) -> float:
+    # use double precision for numerical stability
+    feats_fake = feats_fake.double()
+    feats_real = feats_real.double()
     mu_fake = feats_fake.mean(dim=0)
     mu_real = feats_real.mean(dim=0)
     cov_fake = _covariance(feats_fake, mu_fake)
@@ -142,8 +145,9 @@ def main():
                         help='Optional directory of real images to use as ground truth')
     parser.add_argument('--result_dir', default='results',
                         help='Directory containing generated results')
-    parser.add_argument('--num_samples', type=int, default=100,
-                        help='Number of images to evaluate')
+    parser.add_argument('--num_samples', type=int, default=None,
+                        help='Number of images to evaluate; defaults to using '
+                             'all available images')
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--output', default=None,
                         help='Optional path to save the result JSON')
@@ -170,8 +174,15 @@ def main():
             f'Run "python main.py --dataset {args.dataset} --phase test" first.'
         )
 
-    if len(real_paths) < args.num_samples or len(fake_paths) < args.num_samples:
-        raise ValueError('Not enough images for the requested number of samples')
+    # Determine how many samples to use
+    if args.num_samples is None:
+        args.num_samples = min(len(real_paths), len(fake_paths))
+    else:
+        args.num_samples = min(args.num_samples, len(real_paths), len(fake_paths))
+
+    if args.num_samples == 0:
+        raise ValueError('No images found for evaluation')
+
     random.shuffle(real_paths)
     random.shuffle(fake_paths)
     real_paths = real_paths[:args.num_samples]

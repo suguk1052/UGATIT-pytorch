@@ -116,8 +116,10 @@ pip install -r requirements.txt
 ### KID / FID Evaluation
 After running `main.py --phase test`, compute the scores:
 ```bash
-python eval.py --dataset YOUR_DATASET_NAME --direction A2B --num_samples 100
+python eval.py --dataset YOUR_DATASET_NAME --direction A2B
 ```
+Add `--num_samples N` to limit the evaluation to `N` random images. By default
+all images common to the real and generated directories are used.
 Results are written to `results/YOUR_DATASET_NAME/eval/` by default. Use
 `--result_dir OTHER_DIR` if your generated images live elsewhere. The
 script creates `kid_score_A2B.json` and `fid_score_A2B.json` (or
