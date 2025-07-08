@@ -55,6 +55,7 @@ The results of the paper came from the **Tensorflow code**
 ```
 > python main.py --dataset selfie2anime --phase test
 ```
+* Use `--resume_iter N` to load a specific checkpoint during testing.
 
 ## Architecture
 <div align="center">
