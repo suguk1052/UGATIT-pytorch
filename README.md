@@ -56,6 +56,8 @@ The results of the paper came from the **Tensorflow code**
 > python main.py --dataset selfie2anime --phase test
 ```
 * Use `--resume_iter N` to load a specific checkpoint during testing.
+* Generated images are stored under `results/YOUR_DATASET_NAME/test/A2B/` and
+  `test/B2A/` using the original filenames from `testA` and `testB`.
 
 ## Architecture
 <div align="center">
@@ -111,12 +113,15 @@ cd UGATIT-pytorch
 pip install -r requirements.txt
 ```
 
-### KID Evaluation
-After running `main.py --phase test`, compute the score:
+### KID / FID Evaluation
+After running `main.py --phase test`, compute the scores:
 ```bash
 python eval.py --dataset YOUR_DATASET_NAME --direction A2B --num_samples 100
 ```
 Results are written to `results/YOUR_DATASET_NAME/eval/` by default. Use
 `--result_dir OTHER_DIR` if your generated images live elsewhere. The
-output JSON contains both the raw `kid` value and `kid_x100`, which is
-simply `kid` multiplied by 100 for easier viewing.
+script creates `kid_score_A2B.json` and `fid_score_A2B.json` (or
+`*_B2A.json` when evaluating the opposite direction). The metrics are
+computed from the images saved under `results/YOUR_DATASET_NAME/test/A2B/`
+or `test/B2A/`. The KID file contains both the raw `kid` value and
+`kid_x100` for convenience.

@@ -8,6 +8,7 @@ from PIL import Image
 import torch
 from torch import nn
 from torchvision import models, transforms
+import numpy as np
 
 try:
     Identity = nn.Identity  # available in newer PyTorch versions
@@ -24,13 +25,6 @@ def list_image_files(directory: str) -> List[str]:
              if f.lower().endswith(exts)]
     return sorted(files)
 
-
-def list_image_files_prefix(directory: str, prefix: str) -> List[str]:
-    """List image files with a specific prefix inside a directory."""
-    exts = ('.jpg', '.jpeg', '.png', '.bmp')
-    files = [os.path.join(directory, f) for f in os.listdir(directory)
-             if f.startswith(prefix) and f.lower().endswith(exts)]
-    return sorted(files)
 
 
 def load_inception(device: str):
@@ -91,8 +85,37 @@ def compute_kid(feats_fake: torch.Tensor, feats_real: torch.Tensor) -> float:
     return kid.item()
 
 
+def _covariance(feats: torch.Tensor, mean: torch.Tensor) -> torch.Tensor:
+    """Compute the unbiased covariance of a feature tensor."""
+    diff = feats - mean
+    return diff.t().mm(diff) / (feats.size(0) - 1)
+
+
+def _sqrtm_psd(mat: torch.Tensor) -> torch.Tensor:
+    """Matrix square root for symmetric positive semi-definite matrices."""
+    m = mat.cpu().numpy()
+    vals, vecs = np.linalg.eigh(m)
+    vals[vals < 0] = 0
+    sqrt_m = vecs @ np.diag(np.sqrt(vals)) @ vecs.T
+    return torch.from_numpy(sqrt_m).to(mat.device)
+
+
+def compute_fid(feats_fake: torch.Tensor, feats_real: torch.Tensor) -> float:
+    mu_fake = feats_fake.mean(dim=0)
+    mu_real = feats_real.mean(dim=0)
+    cov_fake = _covariance(feats_fake, mu_fake)
+    cov_real = _covariance(feats_real, mu_real)
+
+    diff = mu_fake - mu_real
+    cov_sqrt = _sqrtm_psd(cov_fake.mm(cov_real))
+    fid = diff.dot(diff) + torch.trace(cov_fake + cov_real - 2 * cov_sqrt)
+    return fid.item()
+
+
 def main():
-    parser = argparse.ArgumentParser(description='Compute KID on UGATIT results')
+    parser = argparse.ArgumentParser(
+        description='Compute KID and FID on UGATIT results'
+    )
     parser.add_argument('--dataset', required=True, help='Dataset name')
     parser.add_argument('--direction', choices=['A2B', 'B2A'], default='A2B',
                         help='Translation direction to evaluate')
@@ -111,11 +134,10 @@ def main():
 
     real_dir = os.path.join(args.dataset_root, args.dataset,
                             'testB' if args.direction == 'A2B' else 'testA')
-    fake_dir = os.path.join(args.result_dir, args.dataset, 'test')
+    fake_dir = os.path.join(args.result_dir, args.dataset, 'test', args.direction)
 
-    prefix = args.direction + '_'
     real_paths = list_image_files(real_dir)
-    fake_paths = list_image_files_prefix(fake_dir, prefix)
+    fake_paths = list_image_files(fake_dir)
 
     if not fake_paths:
         raise RuntimeError(
@@ -130,7 +152,7 @@ def main():
     real_paths = real_paths[:args.num_samples]
     fake_paths = fake_paths[:args.num_samples]
 
-    print(f'Computing KID for {args.dataset} {args.direction} on '
+    print(f'Computing KID and FID for {args.dataset} {args.direction} on '
           f'{args.num_samples} images...')
 
     model, transform = load_inception(device)
@@ -139,25 +161,46 @@ def main():
     feats_fake = extract_features(fake_paths, model, device, args.batch_size, transform)
 
     kid_score = compute_kid(feats_fake, feats_real)
+    fid_score = compute_fid(feats_fake, feats_real)
     kid_x100 = kid_score * 100
     print(
         f'KID score for {args.dataset} {args.direction} '
         f'(mean over {args.num_samples} images): '
         f'{kid_score:.6f} ({kid_x100:.4f} x100)'
     )
+    print(
+        f'FID score for {args.dataset} {args.direction} '
+        f'(mean over {args.num_samples} images): '
+        f'{fid_score:.6f}'
+    )
 
     if args.output is None:
         out_dir = os.path.join(args.result_dir, args.dataset, 'eval')
         os.makedirs(out_dir, exist_ok=True)
-        args.output = os.path.join(out_dir, f'kid_score_{args.direction}.json')
-
-    with open(args.output, 'w') as f:
+        kid_output = os.path.join(out_dir, f'kid_score_{args.direction}.json')
+    else:
+        kid_output = args.output
+        out_dir = os.path.dirname(args.output)
+    fid_output = os.path.join(out_dir, f'fid_score_{args.direction}.json')
+    with open(kid_output, 'w') as f:
         json.dump(
             {
                 'dataset': args.dataset,
                 'direction': args.direction,
                 'kid': kid_score,
                 'kid_x100': kid_x100,
+                'num_samples': args.num_samples,
+            },
+            f,
+            indent=2,
+        )
+
+    with open(fid_output, 'w') as f:
+        json.dump(
+            {
+                'dataset': args.dataset,
+                'direction': args.direction,
+                'fid': fid_score,
                 'num_samples': args.num_samples,
             },
             f,
