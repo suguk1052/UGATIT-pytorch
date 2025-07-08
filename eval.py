@@ -9,6 +9,12 @@ import torch
 from torch import nn
 from torchvision import models, transforms
 import numpy as np
+try:
+    from scipy import linalg as scipy_linalg
+    _HAVE_SCIPY = True
+except Exception:  # scipy may not be installed
+    scipy_linalg = None
+    _HAVE_SCIPY = False
 
 try:
     Identity = nn.Identity  # available in newer PyTorch versions
@@ -91,12 +97,19 @@ def _covariance(feats: torch.Tensor, mean: torch.Tensor) -> torch.Tensor:
     return diff.t().mm(diff) / (feats.size(0) - 1)
 
 
-def _sqrtm_psd(mat: torch.Tensor) -> torch.Tensor:
-    """Matrix square root for symmetric positive semi-definite matrices."""
-    m = mat.cpu().numpy()
-    vals, vecs = np.linalg.eigh(m)
-    vals[vals < 0] = 0
-    sqrt_m = vecs @ np.diag(np.sqrt(vals)) @ vecs.T
+def _sqrtm(mat: torch.Tensor) -> torch.Tensor:
+    """Matrix square root using SciPy when available or an eigen fallback."""
+    m = mat.cpu().numpy().astype(np.float64)
+    if _HAVE_SCIPY:
+        sqrt_m, _ = scipy_linalg.sqrtm(m, disp=False)
+        if np.iscomplexobj(sqrt_m):
+            sqrt_m = sqrt_m.real
+    else:
+        vals, vecs = np.linalg.eig(m)
+        vals = np.clip(vals.real, a_min=0, a_max=None)
+        sqrt_m = vecs @ np.diag(np.sqrt(vals)) @ np.linalg.inv(vecs)
+        if np.iscomplexobj(sqrt_m):
+            sqrt_m = sqrt_m.real
     return torch.from_numpy(sqrt_m).to(mat.device)
 
 
@@ -107,9 +120,13 @@ def compute_fid(feats_fake: torch.Tensor, feats_real: torch.Tensor) -> float:
     cov_real = _covariance(feats_real, mu_real)
 
     diff = mu_fake - mu_real
-    cov_sqrt = _sqrtm_psd(cov_fake.mm(cov_real))
+    cov_prod = cov_fake.mm(cov_real)
+    cov_sqrt = _sqrtm(cov_prod)
     fid = diff.dot(diff) + torch.trace(cov_fake + cov_real - 2 * cov_sqrt)
-    return fid.item()
+    fid_val = fid.item()
+    if fid_val < 0:
+        fid_val = 0.0
+    return fid_val
 
 
 def main():
