@@ -479,6 +479,11 @@ class UGATIT(object) :
                 return
 
         self.genA2B.eval(), self.genB2A.eval()
+        out_A2B_dir = os.path.join(self.result_dir, self.dataset, 'test', 'A2B')
+        out_B2A_dir = os.path.join(self.result_dir, self.dataset, 'test', 'B2A')
+        check_folder(out_A2B_dir)
+        check_folder(out_B2A_dir)
+
         with torch.no_grad():
             for n, (real_A, _) in enumerate(self.testA_loader):
                 real_A = real_A.to(self.device)
@@ -487,7 +492,9 @@ class UGATIT(object) :
 
                 out_A2B = RGB2BGR(tensor2numpy(denorm(fake_A2B[0])))
 
-                cv2.imwrite(os.path.join(self.result_dir, self.dataset, 'test', 'A2B_%d.png' % (n + 1)), out_A2B * 255.0)
+                src_path = self.testA.imgs[n][0]
+                fname = os.path.basename(src_path)
+                cv2.imwrite(os.path.join(out_A2B_dir, fname), out_A2B * 255.0)
 
             for n, (real_B, _) in enumerate(self.testB_loader):
                 real_B = real_B.to(self.device)
@@ -496,5 +503,7 @@ class UGATIT(object) :
 
                 out_B2A = RGB2BGR(tensor2numpy(denorm(fake_B2A[0])))
 
-                cv2.imwrite(os.path.join(self.result_dir, self.dataset, 'test', 'B2A_%d.png' % (n + 1)), out_B2A * 255.0)
+                src_path = self.testB.imgs[n][0]
+                fname = os.path.basename(src_path)
+                cv2.imwrite(os.path.join(out_B2A_dir, fname), out_B2A * 255.0)
         torch.cuda.empty_cache()
