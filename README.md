@@ -49,13 +49,14 @@ python preprocess_a.py --dataset_name YOUR_DATASET_NAME
 
 Run this once before starting `main.py` to prepare domain A images.
 
-This crops each image to its upper 40%, fills the rest with neutral gray, then
-shrinks the result to 90% so a gray border cushions the next step. A random
-±8° rotation is applied and the image is finally centered on a 512×512 gray
-canvas (downscaling again if needed) before writing a PNG with the same
-basename inside `dataset/YOUR_DATASET_NAME/trainA` and
-`dataset/YOUR_DATASET_NAME/testA`. After preprocessing, proceed with the usual
-training command below.
+This crops each image to its upper 40% and then applies random translations
+up to ±10 pixels along both axes and random rotations up to ±10°. Any exposed
+regions are filled with neutral gray. The result is scaled to cover a
+512×512 frame while preserving aspect ratio and centrally cropped to that
+size. Each processed file keeps the original base name and is written to
+`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`.
+Run this once before starting `main.py` to prepare domain A images, then
+proceed with the usual training command below.
 
 ### Train
 ```

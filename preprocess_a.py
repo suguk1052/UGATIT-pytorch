@@ -9,40 +9,44 @@ def process_image(img_path, output_path):
     if img is None:
         print(f"Unable to read {img_path}")
         return
+
     h, w = img.shape[:2]
-    gray = np.full_like(img, 127, dtype=np.uint8)
     top_h = int(h * 0.4)
-    gray[:top_h, :, :] = img[:top_h, :, :]
-    img = gray
+    img = img[:top_h, :, :]
 
-    # shrink to 90% and center with gray padding so rotation won't crop edges
-    scale = 0.90
-    scaled = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-    pad = np.full_like(img, 127, dtype=np.uint8)
-    sh, sw = scaled.shape[:2]
-    y_off = (h - sh) // 2
-    x_off = (w - sw) // 2
-    pad[y_off:y_off + sh, x_off:x_off + sw] = scaled
-    img = pad
+    # compute padding so rotation/translation don't crop the image
+    max_trans = 10
+    max_angle = 10
+    rad = np.deg2rad(max_angle)
+    w_rot = w * abs(np.cos(rad)) + top_h * abs(np.sin(rad))
+    h_rot = top_h * abs(np.cos(rad)) + w * abs(np.sin(rad))
+    pad_w = int(np.ceil((w_rot - w) / 2 + max_trans))
+    pad_h = int(np.ceil((h_rot - top_h) / 2 + max_trans))
+    gray = (127, 127, 127)
+    padded = cv2.copyMakeBorder(
+        img, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=gray
+    )
 
-    # random rotation while keeping canvas size
-    angle = random.uniform(-8, 8)
-    M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-    img = cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(127, 127, 127))
+    ph, pw = padded.shape[:2]
+    angle = random.uniform(-max_angle, max_angle)
+    tx = random.uniform(-max_trans, max_trans)
+    ty = random.uniform(-max_trans, max_trans)
+    M = cv2.getRotationMatrix2D((pw / 2, ph / 2), angle, 1.0)
+    M[0, 2] += tx
+    M[1, 2] += ty
+    transformed = cv2.warpAffine(
+        padded, M, (pw, ph), borderMode=cv2.BORDER_CONSTANT, borderValue=gray
+    )
 
-    # fit into 512x512 canvas without upscaling
+    # scale to cover 512x512 and crop the center
     target = 512
-    fit_scale = min(1.0, min(target / w, target / h))
-    if fit_scale < 1.0:
-        new_w, new_h = int(w * fit_scale), int(h * fit_scale)
-        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-    else:
-        new_h, new_w = h, w
-    canvas = np.full((target, target, 3), 127, dtype=np.uint8)
-    y_off = (target - new_h) // 2
-    x_off = (target - new_w) // 2
-    canvas[y_off:y_off + new_h, x_off:x_off + new_w] = img
-    cv2.imwrite(output_path, canvas)
+    scale = target / min(pw, ph)
+    new_w, new_h = int(pw * scale), int(ph * scale)
+    resized = cv2.resize(transformed, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    y_off = (new_h - target) // 2
+    x_off = (new_w - target) // 2
+    crop = resized[y_off:y_off + target, x_off:x_off + target]
+    cv2.imwrite(output_path, crop)
 
 def process_split(source_dir, dest_dir):
     os.makedirs(dest_dir, exist_ok=True)
