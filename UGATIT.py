@@ -179,6 +179,7 @@ class UGATIT(object) :
         self.Rho_clipper = RhoClipper(0, 1)
 
     def train(self):
+        torch.autograd.set_detect_anomaly(True)
         self.genA2B.train(), self.genB2A.train(), self.disGA.train(), self.disGB.train(), self.disLA.train(), self.disLB.train()
 
         start_iter = 1
@@ -252,6 +253,15 @@ class UGATIT(object) :
 
             Discriminator_loss = D_loss_A + D_loss_B
             Discriminator_loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                itertools.chain(
+                    self.disGA.parameters(),
+                    self.disGB.parameters(),
+                    self.disLA.parameters(),
+                    self.disLB.parameters(),
+                ),
+                max_norm=1.0,
+            )
             self.D_optim.step()
 
             # Update G
@@ -317,6 +327,13 @@ class UGATIT(object) :
 
             Generator_loss = G_loss_A + G_loss_B + self.ds_weight * DS_loss
             Generator_loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                itertools.chain(
+                    self.genA2B.parameters(),
+                    self.genB2A.parameters(),
+                ),
+                max_norm=1.0,
+            )
             self.G_optim.step()
 
             # clip parameter of AdaILN and ILN, applied after optimizer step
