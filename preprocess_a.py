@@ -15,8 +15,8 @@ def process_image(img_path, output_path):
     gray[:top_h, :, :] = img[:top_h, :, :]
     img = gray
 
-    # shrink to 95% and center with gray padding so later transforms don't crop edges
-    scale = 0.95
+    # shrink to 90% and center with gray padding so later transforms don't crop edges
+    scale = 0.90
     scaled = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
     pad = np.full_like(img, 127, dtype=np.uint8)
     sh, sw = scaled.shape[:2]
@@ -26,7 +26,7 @@ def process_image(img_path, output_path):
     img = pad
 
     # random rotation and translation while keeping canvas size
-    angle = random.uniform(-10, 10)
+    angle = random.uniform(-8, 8)
     tx = random.randint(-10, 10)
     ty = random.randint(-10, 10)
     M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)

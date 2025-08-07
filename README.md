@@ -48,8 +48,8 @@ python preprocess_a.py --dataset_name YOUR_DATASET_NAME
 ```
 
 This crops each image to its upper 40%, fills the rest with neutral gray, then
-scales the result to 95% so a gray border cushions later transforms. Random
-±10° rotations and ±10 px translations are applied before writing PNGs with the
+scales the result to 90% so a gray border cushions later transforms. Random
+±8° rotations and ±10 px translations are applied before writing PNGs with the
 same basename inside `dataset/YOUR_DATASET_NAME/trainA` and
 `dataset/YOUR_DATASET_NAME/testA`. After preprocessing, proceed with the usual
 training command below.
