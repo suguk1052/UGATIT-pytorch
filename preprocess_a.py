@@ -15,7 +15,7 @@ def process_image(img_path, output_path):
     gray[:top_h, :, :] = img[:top_h, :, :]
     img = gray
 
-    # shrink to 90% and center with gray padding so later transforms don't crop edges
+    # shrink to 90% and center with gray padding so rotation won't crop edges
     scale = 0.90
     scaled = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
     pad = np.full_like(img, 127, dtype=np.uint8)
@@ -25,15 +25,24 @@ def process_image(img_path, output_path):
     pad[y_off:y_off + sh, x_off:x_off + sw] = scaled
     img = pad
 
-    # random rotation and translation while keeping canvas size
+    # random rotation while keeping canvas size
     angle = random.uniform(-8, 8)
-    tx = random.randint(-10, 10)
-    ty = random.randint(-10, 10)
     M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-    M[0, 2] += tx
-    M[1, 2] += ty
     img = cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(127, 127, 127))
-    cv2.imwrite(output_path, img)
+
+    # fit into 512x512 canvas without upscaling
+    target = 512
+    fit_scale = min(1.0, min(target / w, target / h))
+    if fit_scale < 1.0:
+        new_w, new_h = int(w * fit_scale), int(h * fit_scale)
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    else:
+        new_h, new_w = h, w
+    canvas = np.full((target, target, 3), 127, dtype=np.uint8)
+    y_off = (target - new_h) // 2
+    x_off = (target - new_w) // 2
+    canvas[y_off:y_off + new_h, x_off:x_off + new_w] = img
+    cv2.imwrite(output_path, canvas)
 
 def process_split(source_dir, dest_dir):
     os.makedirs(dest_dir, exist_ok=True)
