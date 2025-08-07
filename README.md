@@ -18,24 +18,38 @@ The results of the paper came from the **Tensorflow code**
 ## Usage
 ```
 ├── dataset
-   └── YOUR_DATASET_NAME
-       ├── trainA
-           ├── xxx.jpg (name, format doesn't matter)
-           ├── yyy.png
-           └── ...
-       ├── trainB
-           ├── zzz.jpg
-           ├── www.png
-           └── ...
-       ├── testA
-           ├── aaa.jpg 
-           ├── bbb.png
-           └── ...
-       └── testB
-           ├── ccc.jpg 
-           ├── ddd.png
-           └── ...
+   └── YOUR_DATASET_NAME
+       ├── trainA
+            ├── xxx.jpg (name, format doesn't matter)
+            ├── yyy.png
+            └── ...
+       ├── trainB
+            ├── zzz.jpg
+            ├── www.png
+            └── ...
+       ├── testA
+            ├── aaa.jpg
+            ├── bbb.png
+            └── ...
+       └── testB
+            ├── ccc.jpg
+            ├── ddd.png
+            └── ...
 ```
+
+### Domain A preprocessing (optional)
+
+If you need to crop and augment domain A images before training, place the
+original files under `preprocess_source/trainA` and `preprocess_source/testA`
+and run:
+
+```
+python preprocess_a.py --dataset_name YOUR_DATASET_NAME
+```
+
+This generates PNGs with the same basenames inside
+`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`.
+After preprocessing, proceed with the usual training command below.
 
 ### Train
 ```
