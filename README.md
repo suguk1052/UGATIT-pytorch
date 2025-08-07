@@ -18,24 +18,45 @@ The results of the paper came from the **Tensorflow code**
 ## Usage
 ```
 ├── dataset
-   └── YOUR_DATASET_NAME
-       ├── trainA
-           ├── xxx.jpg (name, format doesn't matter)
-           ├── yyy.png
-           └── ...
-       ├── trainB
-           ├── zzz.jpg
-           ├── www.png
-           └── ...
-       ├── testA
-           ├── aaa.jpg 
-           ├── bbb.png
-           └── ...
-       └── testB
-           ├── ccc.jpg 
-           ├── ddd.png
-           └── ...
+   └── YOUR_DATASET_NAME
+       ├── trainA
+            ├── xxx.jpg (name, format doesn't matter)
+            ├── yyy.png
+            └── ...
+       ├── trainB
+            ├── zzz.jpg
+            ├── www.png
+            └── ...
+       ├── testA
+            ├── aaa.jpg
+            ├── bbb.png
+            └── ...
+       └── testB
+            ├── ccc.jpg
+            ├── ddd.png
+            └── ...
 ```
+
+### Domain A preprocessing (optional)
+
+If you need to crop and augment domain A images before training, place the
+original files under `preprocess_source/trainA` and `preprocess_source/testA`
+and run:
+
+```
+python preprocess_a.py --dataset_name YOUR_DATASET_NAME
+```
+
+Run this once before starting `main.py` to prepare domain A images.
+
+This crops each image to its upper 40% and then applies random translations
+up to ±10 pixels along both axes and random rotations up to ±10°. Any exposed
+regions are filled with neutral gray. The result is scaled to cover a
+512×512 frame while preserving aspect ratio and centrally cropped to that
+size. Each processed file keeps the original base name and is written to
+`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`.
+Run this once before starting `main.py` to prepare domain A images, then
+proceed with the usual training command below.
 
 ### Train
 ```
