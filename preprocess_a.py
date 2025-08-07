@@ -14,13 +14,25 @@ def process_image(img_path, output_path):
     top_h = int(h * 0.4)
     gray[:top_h, :, :] = img[:top_h, :, :]
     img = gray
+
+    # shrink to 95% and center with gray padding so later transforms don't crop edges
+    scale = 0.95
+    scaled = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
+    pad = np.full_like(img, 127, dtype=np.uint8)
+    sh, sw = scaled.shape[:2]
+    y_off = (h - sh) // 2
+    x_off = (w - sw) // 2
+    pad[y_off:y_off + sh, x_off:x_off + sw] = scaled
+    img = pad
+
+    # random rotation and translation while keeping canvas size
+    angle = random.uniform(-10, 10)
     tx = random.randint(-10, 10)
     ty = random.randint(-10, 10)
-    M_trans = np.float32([[1, 0, tx], [0, 1, ty]])
-    img = cv2.warpAffine(img, M_trans, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(127, 127, 127))
-    angle = random.uniform(-10, 10)
-    M_rot = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
-    img = cv2.warpAffine(img, M_rot, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(127, 127, 127))
+    M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
+    M[0, 2] += tx
+    M[1, 2] += ty
+    img = cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(127, 127, 127))
     cv2.imwrite(output_path, img)
 
 def process_split(source_dir, dest_dir):
