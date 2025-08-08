@@ -41,10 +41,11 @@ def process_image(img_path, output_path):
     # scale to cover 512x512 and crop the center
     target = 512
     scale = target / min(pw, ph)
-    new_w, new_h = int(pw * scale), int(ph * scale)
+    new_w = int(np.ceil(pw * scale))
+    new_h = int(np.ceil(ph * scale))
     resized = cv2.resize(transformed, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-    y_off = (new_h - target) // 2
-    x_off = (new_w - target) // 2
+    y_off = max((new_h - target) // 2, 0)
+    x_off = max((new_w - target) // 2, 0)
     crop = resized[y_off:y_off + target, x_off:x_off + target]
     cv2.imwrite(output_path, crop)
 
