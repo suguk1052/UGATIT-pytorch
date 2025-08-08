@@ -50,7 +50,7 @@ python preprocess_a.py --dataset_name YOUR_DATASET_NAME
 Run this once before starting `main.py` to prepare domain A images.
 
 This crops each image to its upper 40% and then applies random translations
-up to ±10 pixels along both axes and random rotations up to ±10°. Any exposed
+up to ±10 pixels along both axes and random rotations up to ±15°. Any exposed
 regions are filled with neutral gray. The result is scaled to cover a
 512×512 frame while preserving aspect ratio and centrally cropped to that
 size. Each processed file keeps the original base name and is written to

@@ -16,7 +16,7 @@ def process_image(img_path, output_path):
 
     # compute padding so rotation/translation don't crop the image
     max_trans = 10
-    max_angle = 10
+    max_angle = 15
     rad = np.deg2rad(max_angle)
     w_rot = w * abs(np.cos(rad)) + top_h * abs(np.sin(rad))
     h_rot = top_h * abs(np.cos(rad)) + w * abs(np.sin(rad))
