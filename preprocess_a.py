@@ -21,7 +21,7 @@ def process_image(img_path, output_path, keep_bottom=False):
         mask = cv2.GaussianBlur(mask, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
         mask[: int(h * 0.65), :] = 0.0
         mask[int(h * 0.75) :, :] = 1.0
-        center_ratio = 0.85
+        center_ratio = 0.88
     else:
         # keep the top 40% and fade between 35% and 45%
         mask = np.zeros((h, w), dtype=np.float32)
