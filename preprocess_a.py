@@ -17,9 +17,7 @@ def process_image(img_path, output_path):
     mask = np.zeros((h, w), dtype=np.float32)
     mask[: int(h * 0.4), :] = 1.0
     sigma = h * 0.05 / 3.0  # ~10% height transition zone
-    mask = cv2.GaussianBlur(
-        mask, (0, 0), sigmaX=0, sigmaY=sigma, borderType=cv2.BORDER_REPLICATE
-    )
+    mask = cv2.GaussianBlur(mask, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
     mask[: int(h * 0.35), :] = 1.0
     mask[int(h * 0.45) :, :] = 0.0
     gray_img = np.full_like(img, gray_val, dtype=np.uint8)
