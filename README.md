@@ -49,14 +49,15 @@ python preprocess_a.py --dataset_name YOUR_DATASET_NAME
 
 Run this once before starting `main.py` to prepare domain A images.
 
-This crops each image to its upper 40% and then applies random translations
-up to ±10 pixels along both axes and random rotations up to ±15°. Any exposed
-regions are filled with neutral gray. The result is scaled to cover a
-512×512 frame while preserving aspect ratio and centrally cropped to that
-size. Each processed file keeps the original base name and is written to
-`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`.
-Run this once before starting `main.py` to prepare domain A images, then
-proceed with the usual training command below.
+This preserves only the top 40 % of each image, fading the content to neutral
+gray across the 35–45 % band using a Gaussian kernel. The resulting canvas then
+undergoes random translations up to ±10 pixels and random rotations up to ±10°.
+Any exposed regions from those transforms are filled with the same gray. The
+output is scaled to cover a 512×512 frame while keeping aspect ratio and cropped
+to that size. Each processed file keeps the original base name and is written to
+`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`. Run
+this once before starting `main.py` to prepare domain A images, then proceed
+with the usual training command below.
 
 ### Train
 ```

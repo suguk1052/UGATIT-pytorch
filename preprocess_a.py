@@ -11,20 +11,32 @@ def process_image(img_path, output_path):
         return
 
     h, w = img.shape[:2]
-    top_h = int(h * 0.4)
-    img = img[:top_h, :, :]
+    gray_val = 127
+
+    # build mask keeping the top 40% but fading out between 35% and 45%
+    mask = np.zeros((h, w), dtype=np.float32)
+    mask[: int(h * 0.4), :] = 1.0
+    sigma = h * 0.05 / 3.0  # ~10% height transition zone
+    mask = cv2.GaussianBlur(
+        mask, (0, 0), sigmaX=0, sigmaY=sigma, borderType=cv2.BORDER_REPLICATE
+    )
+    mask[: int(h * 0.35), :] = 1.0
+    mask[int(h * 0.45) :, :] = 0.0
+    gray_img = np.full_like(img, gray_val, dtype=np.uint8)
+    blended = img.astype(np.float32) * mask[:, :, None] + gray_img.astype(np.float32) * (1 - mask[:, :, None])
+    blended = blended.astype(np.uint8)
 
     # compute padding so rotation/translation don't crop the image
     max_trans = 10
-    max_angle = 15
+    max_angle = 10
     rad = np.deg2rad(max_angle)
-    w_rot = w * abs(np.cos(rad)) + top_h * abs(np.sin(rad))
-    h_rot = top_h * abs(np.cos(rad)) + w * abs(np.sin(rad))
+    w_rot = w * abs(np.cos(rad)) + h * abs(np.sin(rad))
+    h_rot = h * abs(np.cos(rad)) + w * abs(np.sin(rad))
     pad_w = int(np.ceil((w_rot - w) / 2 + max_trans))
-    pad_h = int(np.ceil((h_rot - top_h) / 2 + max_trans))
-    gray = (127, 127, 127)
+    pad_h = int(np.ceil((h_rot - h) / 2 + max_trans))
+    gray = (gray_val, gray_val, gray_val)
     padded = cv2.copyMakeBorder(
-        img, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=gray
+        blended, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=gray
     )
 
     ph, pw = padded.shape[:2]
