@@ -39,25 +39,27 @@ The results of the paper came from the **Tensorflow code**
 
 ### Domain A preprocessing (optional)
 
-If you need to crop and augment domain A images before training, place the
+If you need to crop and augment domain A images before training, place the
 original files under `preprocess_source/trainA` and `preprocess_source/testA`
 and run:
 
 ```
-python preprocess_a.py --dataset_name YOUR_DATASET_NAME
+python preprocess_a.py --dataset_name YOUR_DATASET_NAME [--bottom]
 ```
 
-Run this once before starting `main.py` to prepare domain A images.
+Run this once before starting `main.py` to prepare domain A images.
 
-This preserves only the top 40 % of each image, fading the content to neutral
-gray across the 35–45 % band using a Gaussian kernel. The resulting canvas then
-undergoes random translations up to ±10 pixels and random rotations up to ±10°.
-Any exposed regions from those transforms are filled with the same gray. The
-output is scaled to cover a 512×512 frame while keeping aspect ratio and cropped
-so the row at 20 % of the original height falls at the canvas center. Each processed file keeps the original base name and is written to
-`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`. Run
-this once before starting `main.py` to prepare domain A images, then proceed
-with the usual training command below.
+By default the script keeps only the top 40 % of each image, fading to neutral
+gray across the 35–45 % band using a Gaussian kernel. With the `--bottom` flag,
+it instead retains the bottom 30 %, fading the 65–75 % band. The resulting
+canvas undergoes random translations up to ±10 pixels and random rotations up to
+±10°, with any exposed regions filled with the same gray. The output is scaled
+to cover a 512×512 frame while keeping aspect ratio and cropped so the row at
+20 % (or 85 % when using `--bottom`) of the original height falls at the canvas
+center. Each processed file keeps the original base name and is written to
+`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`. After
+running this preprocessing step you can proceed with the usual training command
+below.
 
 ### Train
 ```
