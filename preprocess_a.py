@@ -48,15 +48,17 @@ def process_image(img_path, output_path):
         padded, M, (pw, ph), borderMode=cv2.BORDER_CONSTANT, borderValue=gray
     )
 
-    # scale to cover 512x512 and crop the center
+    # scale to cover 512x512 and crop so the original 20% height sits at center
     target = 512
     scale = target / min(pw, ph)
     new_w = int(np.ceil(pw * scale))
     new_h = int(np.ceil(ph * scale))
     resized = cv2.resize(transformed, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-    y_off = max((new_h - target) // 2, 0)
+    base_y = (new_h - target) // 2
+    bias = int(0.3 * h * scale)
+    y_off = min(max(base_y - bias, 0), new_h - target)
     x_off = max((new_w - target) // 2, 0)
-    crop = resized[y_off:y_off + target, x_off:x_off + target]
+    crop = resized[y_off : y_off + target, x_off : x_off + target]
     cv2.imwrite(output_path, crop)
 
 def process_split(source_dir, dest_dir):
