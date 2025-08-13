@@ -55,7 +55,7 @@ it instead retains the bottom 30 %, fading the 65–75 % band. The resulting
 canvas undergoes random translations up to ±10 pixels and random rotations up to
 ±10°, with any exposed regions filled with the same gray. The output is scaled
 to cover a 512×512 frame while keeping aspect ratio and cropped so the row at
-20 % (or 88 % when using `--bottom`) of the original height falls at the canvas
+20 % (or 93 % when using `--bottom`) of the original height falls at the canvas
 center. Each processed file keeps the original base name and is written to
 `dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`. After
 running this preprocessing step you can proceed with the usual training command

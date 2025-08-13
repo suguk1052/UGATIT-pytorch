@@ -21,7 +21,7 @@ def process_image(img_path, output_path, keep_bottom=False):
         mask = cv2.GaussianBlur(mask, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
         mask[: int(h * 0.65), :] = 0.0
         mask[int(h * 0.75) :, :] = 1.0
-        center_ratio = 0.88
+        center_ratio = 0.93
     else:
         # keep the top 40% and fade between 35% and 45%
         mask = np.zeros((h, w), dtype=np.float32)
@@ -44,9 +44,18 @@ def process_image(img_path, output_path, keep_bottom=False):
     pad_w = int(np.ceil((w_rot - w) / 2 + max_trans))
     pad_h = int(np.ceil((h_rot - h) / 2 + max_trans))
     gray = (gray_val, gray_val, gray_val)
-    padded = cv2.copyMakeBorder(
-        blended, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=gray
-    )
+
+    if keep_bottom:
+        top_pad = int(pad_h * 0.5)
+        bottom_pad = int(pad_h * 1.5)
+        side_pad = int(pad_w * 0.8)
+        padded = cv2.copyMakeBorder(
+            blended, top_pad, bottom_pad, side_pad, side_pad, cv2.BORDER_CONSTANT, value=gray
+        )
+    else:
+        padded = cv2.copyMakeBorder(
+            blended, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=gray
+        )
 
     ph, pw = padded.shape[:2]
     angle = random.uniform(-max_angle, max_angle)
@@ -62,6 +71,8 @@ def process_image(img_path, output_path, keep_bottom=False):
     # scale to cover 512x512 and crop so a reference band sits at the canvas center
     target = 512
     scale = target / min(pw, ph)
+    if keep_bottom:
+        scale *= 1.1
     new_w = int(np.ceil(pw * scale))
     new_h = int(np.ceil(ph * scale))
     resized = cv2.resize(transformed, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
