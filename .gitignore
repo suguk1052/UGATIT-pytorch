@@ -3,6 +3,11 @@ dataset/
 results/
 logs/
 
+# Raw images for preprocessing
+preprocess_source/*
+!preprocess_source/**/
+!preprocess_source/**/.gitkeep
+
 # PyTorch model checkpoints
 *.pt
 *.pth

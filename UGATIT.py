@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from networks import *
 from utils import *
 from utils import ResizeCenterCrop
+import torch
 try:
     import torch.utils.checkpoint as checkpoint
     _CHECKPOINT_AVAILABLE = True
@@ -251,8 +252,11 @@ class UGATIT(object) :
                 self.local_dis_ratio * (D_ad_loss_LB + D_ad_cam_loss_LB))
 
             Discriminator_loss = D_loss_A + D_loss_B
-            Discriminator_loss.backward()
-            self.D_optim.step()
+            if torch.isnan(Discriminator_loss):
+                print('Warning: discriminator loss is NaN; skipping update')
+            else:
+                Discriminator_loss.backward()
+                self.D_optim.step()
 
             # Update G
             self.G_optim.zero_grad()
@@ -316,8 +320,11 @@ class UGATIT(object) :
                 + self.cam_weight * G_cam_loss_B
 
             Generator_loss = G_loss_A + G_loss_B + self.ds_weight * DS_loss
-            Generator_loss.backward()
-            self.G_optim.step()
+            if torch.isnan(Generator_loss):
+                print('Warning: generator loss is NaN; skipping update')
+            else:
+                Generator_loss.backward()
+                self.G_optim.step()
 
             # clip parameter of AdaILN and ILN, applied after optimizer step
             self.genA2B.apply(self.Rho_clipper)
