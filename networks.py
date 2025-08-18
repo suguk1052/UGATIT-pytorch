@@ -5,8 +5,7 @@ from torch.nn.parameter import Parameter
 
 class ResnetGenerator(nn.Module):
     def __init__(self, input_nc, output_nc, ngf=64, n_blocks=6,
-                 img_height=256, img_width=256, light=False,
-                 style_dim=8, use_ds=False):
+                 img_height=256, img_width=256, light=False):
         assert(n_blocks >= 0)
         super(ResnetGenerator, self).__init__()
         self.input_nc = input_nc
@@ -16,8 +15,6 @@ class ResnetGenerator(nn.Module):
         self.img_height = img_height
         self.img_width = img_width
         self.light = light
-        self.style_dim = style_dim
-        self.use_ds = use_ds
 
         DownBlock = []
         DownBlock += [nn.ReflectionPad2d(3),
@@ -45,7 +42,7 @@ class ResnetGenerator(nn.Module):
         self.conv1x1 = nn.Conv2d(ngf * mult * 2, ngf * mult, kernel_size=1, stride=1, bias=True)
         self.relu = nn.ReLU(True)
 
-        # Gamma, Beta block with style embedding
+        # Gamma, Beta block
         if self.light:
             FC = [nn.Linear(ngf * mult, ngf * mult, bias=False),
                   nn.ReLU(True),
@@ -57,13 +54,8 @@ class ResnetGenerator(nn.Module):
                   nn.ReLU(True),
                   nn.Linear(ngf * mult, ngf * mult, bias=False),
                   nn.ReLU(True)]
-        if self.use_ds:
-            self.style_fc = nn.Linear(self.style_dim, ngf * mult, bias=False)
-            self.gamma = nn.Linear(ngf * mult * 2, ngf * mult, bias=False)
-            self.beta = nn.Linear(ngf * mult * 2, ngf * mult, bias=False)
-        else:
-            self.gamma = nn.Linear(ngf * mult, ngf * mult, bias=False)
-            self.beta = nn.Linear(ngf * mult, ngf * mult, bias=False)
+        self.gamma = nn.Linear(ngf * mult, ngf * mult, bias=False)
+        self.beta = nn.Linear(ngf * mult, ngf * mult, bias=False)
 
         # Up-Sampling Bottleneck
         for i in range(n_blocks):
@@ -112,14 +104,7 @@ class ResnetGenerator(nn.Module):
         else:
             x_ = self.FC(x.view(x.shape[0], -1))
 
-        if self.use_ds:
-            if z is None:
-                z = torch.randn(x_.size(0), self.style_dim, device=x.device)
-            style = self.style_fc(z)
-            x_cat = torch.cat([x_, style], dim=1)
-            gamma, beta = self.gamma(x_cat), self.beta(x_cat)
-        else:
-            gamma, beta = self.gamma(x_), self.beta(x_)
+        gamma, beta = self.gamma(x_), self.beta(x_)
 
 
         for i in range(self.n_blocks):
@@ -127,6 +112,64 @@ class ResnetGenerator(nn.Module):
         out = self.UpBlock2(x)
 
         return out, cam_logit, heatmap
+
+
+class MaskGenerator(nn.Module):
+    """Simple CNN to predict a foreground mask."""
+    def __init__(self, input_nc=3, ngf=32):
+        super(MaskGenerator, self).__init__()
+        self.model = nn.Sequential(
+            nn.Conv2d(input_nc, ngf, kernel_size=7, padding=3, bias=False),
+            nn.ReLU(True),
+            nn.Conv2d(ngf, ngf, kernel_size=3, padding=1, bias=False),
+            nn.ReLU(True),
+            nn.Conv2d(ngf, 1, kernel_size=1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class BoundaryRefinementModule(nn.Module):
+    """Refine boundaries between foreground and background."""
+    def __init__(self, in_channels=4, ngf=64):
+        super(BoundaryRefinementModule, self).__init__()
+        self.model = nn.Sequential(
+            nn.Conv2d(in_channels, ngf, kernel_size=3, padding=1, bias=False),
+            nn.ReLU(True),
+            nn.Conv2d(ngf, 3, kernel_size=3, padding=1),
+            nn.Tanh()
+        )
+
+    def forward(self, comp, mask):
+        x = torch.cat([comp, mask], dim=1)
+        refined = self.model(x)
+        out = comp + refined
+        return torch.clamp(out, -1.0, 1.0)
+
+
+class ForegroundBackgroundGenerator(nn.Module):
+    """Generator with explicit foreground/background branches."""
+    def __init__(self, input_nc, output_nc, ngf=64, n_blocks=6,
+                 img_height=256, img_width=256, light=False):
+        super(ForegroundBackgroundGenerator, self).__init__()
+        self.mask_net = MaskGenerator(input_nc, ngf // 2)
+        self.fg_gen = ResnetGenerator(input_nc, output_nc, ngf, n_blocks,
+                                      img_height, img_width, light)
+        self.bg_gen = ResnetGenerator(input_nc, output_nc, ngf, n_blocks,
+                                      img_height, img_width, light)
+        self.refine = BoundaryRefinementModule()
+
+    def forward(self, x):
+        mask = self.mask_net(x)
+        fg_in = x * mask
+        bg_in = x * (1 - mask)
+        fg, fg_cam, _ = self.fg_gen(fg_in)
+        bg, _, _ = self.bg_gen(bg_in)
+        comp = fg * mask + bg * (1 - mask)
+        out = self.refine(comp, mask)
+        return out, fg_cam, mask
 
 
 class ResnetBlock(nn.Module):
