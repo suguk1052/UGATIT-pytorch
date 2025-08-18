@@ -66,14 +66,11 @@ below.
 > python main.py --dataset selfie2anime
 ```
 * If the memory of gpu is **not sufficient**, set `--light` to True
-* Enable style diversity with `--use_ds` (see `--style_dim` and `--ds_weight`)
 * Save memory with `--use_checkpoint` for gradient checkpointing
 * To train with a rectangular resolution, set `--aspect_ratio <width/height>`.
   The resulting width `img_size * aspect_ratio` must be divisible by 4.
   For example, a 1:2.3 ratio is approximated with `--aspect_ratio 0.44` when
   using the default `--img_size 256`.
-* Adjust global vs. local discriminator losses with `--global_dis_ratio <0~1>`.
-  The local ratio is `1 - global_dis_ratio`.
 
 ### Test
 ```
@@ -115,8 +112,7 @@ below.
 ## 🛠️ Key Modifications
 
 * `--aspect_ratio` option for non-square training resolutions
-* `--global_dis_ratio` to balance global and local discriminators
-* Optional style diversity via `--use_ds`, `--style_dim`, and `--ds_weight`
+* Foreground/background generator deriving masks from attention heatmaps for background harmonization
 * Gradient checkpointing via `--use_checkpoint`
 * Optional center cropping via `--center_crop` to keep aspect ratio without padding
 
