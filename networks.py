@@ -165,11 +165,11 @@ class ForegroundBackgroundGenerator(nn.Module):
         mask = self.mask_net(x)
         fg_in = x * mask
         bg_in = x * (1 - mask)
-        fg, fg_cam, _ = self.fg_gen(fg_in)
+        fg, fg_cam, fg_heatmap = self.fg_gen(fg_in)
         bg, _, _ = self.bg_gen(bg_in)
         comp = fg * mask + bg * (1 - mask)
         out = self.refine(comp, mask)
-        return out, fg_cam, mask
+        return out, fg_cam, fg_heatmap, mask
 
 
 class ResnetBlock(nn.Module):
