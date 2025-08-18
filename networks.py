@@ -114,23 +114,6 @@ class ResnetGenerator(nn.Module):
         return out, cam_logit, heatmap
 
 
-class MaskGenerator(nn.Module):
-    """Simple CNN to predict a foreground mask."""
-    def __init__(self, input_nc=3, ngf=32):
-        super(MaskGenerator, self).__init__()
-        self.model = nn.Sequential(
-            nn.Conv2d(input_nc, ngf, kernel_size=7, padding=3, bias=False),
-            nn.ReLU(True),
-            nn.Conv2d(ngf, ngf, kernel_size=3, padding=1, bias=False),
-            nn.ReLU(True),
-            nn.Conv2d(ngf, 1, kernel_size=1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        return self.model(x)
-
-
 class BoundaryRefinementModule(nn.Module):
     """Refine boundaries between foreground and background."""
     def __init__(self, in_channels=4, ngf=64):
@@ -154,7 +137,6 @@ class ForegroundBackgroundGenerator(nn.Module):
     def __init__(self, input_nc, output_nc, ngf=64, n_blocks=6,
                  img_height=256, img_width=256, light=False):
         super(ForegroundBackgroundGenerator, self).__init__()
-        self.mask_net = MaskGenerator(input_nc, ngf // 2)
         self.fg_gen = ResnetGenerator(input_nc, output_nc, ngf, n_blocks,
                                       img_height, img_width, light)
         self.bg_gen = ResnetGenerator(input_nc, output_nc, ngf, n_blocks,
@@ -162,11 +144,9 @@ class ForegroundBackgroundGenerator(nn.Module):
         self.refine = BoundaryRefinementModule()
 
     def forward(self, x):
-        mask = self.mask_net(x)
-        fg_in = x * mask
-        bg_in = x * (1 - mask)
-        fg, fg_cam, fg_heatmap = self.fg_gen(fg_in)
-        bg, _, _ = self.bg_gen(bg_in)
+        fg, fg_cam, fg_heatmap = self.fg_gen(x)
+        mask = torch.sigmoid(fg_heatmap)
+        bg, _, _ = self.bg_gen(x)
         comp = fg * mask + bg * (1 - mask)
         out = self.refine(comp, mask)
         return out, fg_cam, fg_heatmap, mask

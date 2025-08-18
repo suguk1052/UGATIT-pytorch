@@ -112,7 +112,7 @@ below.
 ## 🛠️ Key Modifications
 
 * `--aspect_ratio` option for non-square training resolutions
-* Foreground/background generator with automatic mask and background harmonization
+* Foreground/background generator deriving masks from attention heatmaps for background harmonization
 * Gradient checkpointing via `--use_checkpoint`
 * Optional center cropping via `--center_crop` to keep aspect ratio without padding
 
