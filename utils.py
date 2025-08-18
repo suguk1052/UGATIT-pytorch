@@ -55,14 +55,14 @@ def cam(x, size=256):
     cam_img = cv2.applyColorMap(cam_img, cv2.COLORMAP_JET)
     return cam_img / 255.0
 
-def mask(x, size=256):
-    """Visualize a single-channel mask as a 3-channel image."""
+def mask(x, size=256, color=(0, 255, 0)):
+    """Visualize a single-channel mask using a distinct foreground color."""
     x = np.clip(x, 0, 1)
-    mask_img = np.uint8(255 * x)
     if isinstance(size, int):
         size = (size, size)
-    mask_img = cv2.resize(mask_img, (size[1], size[0]))
-    mask_img = cv2.cvtColor(mask_img, cv2.COLOR_GRAY2BGR)
+    mask_img = cv2.resize(x, (size[1], size[0]))
+    mask_img = (mask_img > 0.5).astype(np.float32)
+    mask_img = mask_img[..., None] * np.array(color, dtype=np.float32)
     return mask_img / 255.0
 
 def imagenet_norm(x):
