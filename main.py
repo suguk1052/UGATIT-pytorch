@@ -23,13 +23,6 @@ def parse_args():
     parser.add_argument('--cycle_weight', type=int, default=10, help='Weight for Cycle')
     parser.add_argument('--identity_weight', type=int, default=10, help='Weight for Identity')
     parser.add_argument('--cam_weight', type=int, default=1000, help='Weight for CAM')
-    parser.add_argument('--global_dis_ratio', type=float, default=0.5,
-                        help='Ratio of global discriminator loss (0~1)')
-
-    parser.add_argument('--use_ds', type=str2bool, default=False,
-                        help='enable style diversity with random style vectors')
-    parser.add_argument('--style_dim', type=int, default=8, help='dimension of style vector')
-    parser.add_argument('--ds_weight', type=float, default=1.0, help='diversity sensitive loss weight')
 
     parser.add_argument('--ch', type=int, default=64, help='base channel number per layer')
     parser.add_argument('--n_res', type=int, default=4, help='The number of resblock')
@@ -73,12 +66,8 @@ def check_args(args):
         assert args.batch_size >= 1
     except:
         print('batch size must be larger than or equal to one')
-    if not 0.0 <= args.global_dis_ratio <= 1.0:
-        raise ValueError('global_dis_ratio must be between 0 and 1')
     if args.img_w % 4 != 0:
         raise ValueError('img_size * aspect_ratio must be divisible by 4')
-    if args.use_ds and args.style_dim <= 0:
-        raise ValueError('style_dim must be positive when use_ds is enabled')
     return args
 
 """main"""
