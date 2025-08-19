@@ -127,6 +127,12 @@ def contextual_loss(x, y, h=0.5, eps=1e-5):
     return loss
 
 
+def masked_l1_loss(input, target, mask, eps=1e-8):
+    """L1 loss computed only over masked regions."""
+    diff = torch.abs(input - target) * mask
+    return diff.sum() / (mask.sum() + eps)
+
+
 def total_variation_loss(x):
     """Total variation loss for spatial smoothness."""
     loss = torch.mean(torch.abs(x[:, :, 1:, :] - x[:, :, :-1, :]))

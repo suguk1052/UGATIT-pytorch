@@ -388,10 +388,16 @@ class UGATIT(object) :
             G_ad_loss_LB = self.MSE_loss(fake_LB_logit, torch.ones_like(fake_LB_logit).to(self.device))
             G_ad_cam_loss_LB = self.MSE_loss(fake_LB_cam_logit, torch.ones_like(fake_LB_cam_logit).to(self.device))
 
-            G_recon_loss_A = self.L1_loss(fake_A2B2A, real_A_img)
-            G_recon_loss_B = self.L1_loss(fake_B2A2B, real_B)
+            if self.use_mask_a:
+                mask_fg = 1 - real_A_mask
+                mask_fg_3 = mask_fg.repeat(1, 3, 1, 1)
+                G_recon_loss_A = masked_l1_loss(fake_A2B2A, real_A_img, mask_fg_3)
+                G_identity_loss_A = masked_l1_loss(fake_A2A, real_A_img, mask_fg_3)
+            else:
+                G_recon_loss_A = self.L1_loss(fake_A2B2A, real_A_img)
+                G_identity_loss_A = self.L1_loss(fake_A2A, real_A_img)
 
-            G_identity_loss_A = self.L1_loss(fake_A2A, real_A_img)
+            G_recon_loss_B = self.L1_loss(fake_B2A2B, real_B)
             G_identity_loss_B = self.L1_loss(fake_B2B, real_B)
 
             G_cam_loss_A = self.BCE_loss(fake_B2A_cam_logit, torch.ones_like(fake_B2A_cam_logit).to(self.device)) + self.BCE_loss(fake_A2A_cam_logit, torch.zeros_like(fake_A2A_cam_logit).to(self.device))
