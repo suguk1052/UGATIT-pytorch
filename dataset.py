@@ -1,3 +1,4 @@
+import torch
 import torch.utils.data as data
 
 from PIL import Image
@@ -106,3 +107,35 @@ class ImageFolder(DatasetFolder):
                                           transform=transform,
                                           target_transform=target_transform)
         self.imgs = self.samples
+
+
+class ImageMaskFolder(data.Dataset):
+    """Dataset returning paired images and masks."""
+
+    def __init__(self, img_root, mask_root, transform=None):
+        self.img_root = img_root
+        self.mask_root = mask_root
+        self.transform = transform
+
+        self.imgs = []
+        for fname in sorted(os.listdir(img_root)):
+            if has_file_allowed_extension(fname, IMG_EXTENSIONS):
+                img_path = os.path.join(img_root, fname)
+                mask_path = os.path.join(mask_root, fname)
+                if not os.path.exists(mask_path):
+                    raise FileNotFoundError(f"Mask not found for {fname}")
+                self.imgs.append((img_path, mask_path))
+
+        if len(self.imgs) == 0:
+            raise RuntimeError(f"Found 0 image-mask pairs in: {img_root}")
+
+    def __len__(self):
+        return len(self.imgs)
+
+    def __getitem__(self, index):
+        img_path, mask_path = self.imgs[index]
+        img = Image.open(img_path).convert('RGB')
+        mask = Image.open(mask_path).convert('L')
+        if self.transform is not None:
+            img, mask = self.transform(img, mask)
+        return img, mask

@@ -33,6 +33,8 @@ def parse_args():
     parser.add_argument('--img_ch', type=int, default=3, help='The size of image channel')
     parser.add_argument('--center_crop', type=str2bool, default=False,
                         help='Center crop to maintain aspect ratio instead of simple resize')
+    parser.add_argument('--use_mask_a', action='store_true', default=False,
+                        help='Use mask channel for domain A (expects *_mask folders)')
 
     parser.add_argument('--result_dir', type=str, default='results', help='Directory name to save the results')
     parser.add_argument('--device', type=str, default='cuda', choices=['cpu', 'cuda'], help='Set gpu mode; [cpu, cuda]')

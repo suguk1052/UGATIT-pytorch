@@ -1,11 +1,15 @@
 import time, itertools
-from dataset import ImageFolder
+from dataset import ImageFolder, ImageMaskFolder
 from torchvision import transforms
+from torchvision.transforms import functional as TF
 from torch.utils.data import DataLoader
 from networks import *
 from utils import *
 from utils import ResizeCenterCrop
 import torch
+import random
+import os
+from PIL import Image
 try:
     import torch.utils.checkpoint as checkpoint
     _CHECKPOINT_AVAILABLE = True
@@ -54,6 +58,7 @@ class UGATIT(object) :
         self.aspect_ratio = args.aspect_ratio
         self.img_w = int(self.img_size * self.aspect_ratio)
         self.img_ch = args.img_ch
+        self.use_mask_a = args.use_mask_a
 
         self.center_crop = args.center_crop
         self.device = args.device
@@ -118,32 +123,107 @@ class UGATIT(object) :
 
     def build_model(self):
         """ DataLoader """
-        first_transform = ResizeCenterCrop((self.img_size, self.img_w)) if self.center_crop else transforms.Resize((self.img_size, self.img_w))
-        train_transform = transforms.Compose([
-            first_transform,
-            transforms.RandomHorizontalFlip(),
-            # transforms.Resize((self.img_size + 30, self.img_size+30)),
-            # transforms.RandomCrop(self.img_size),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-        ])
-        test_transform = transforms.Compose([
-            first_transform,
-            transforms.ToTensor(),
-            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-        ])
+        if self.use_mask_a:
+            first_transform_img = (
+                ResizeCenterCrop((self.img_size, self.img_w))
+                if self.center_crop
+                else transforms.Resize((self.img_size, self.img_w))
+            )
+            first_transform_mask = (
+                ResizeCenterCrop((self.img_size, self.img_w), interpolation=Image.NEAREST)
+                if self.center_crop
+                else transforms.Resize((self.img_size, self.img_w), interpolation=Image.NEAREST)
+            )
 
-        self.trainA = ImageFolder(os.path.join('dataset', self.dataset, 'trainA'), train_transform)
-        self.trainB = ImageFolder(os.path.join('dataset', self.dataset, 'trainB'), train_transform)
-        self.testA = ImageFolder(os.path.join('dataset', self.dataset, 'testA'), test_transform)
-        self.testB = ImageFolder(os.path.join('dataset', self.dataset, 'testB'), test_transform)
+            def train_transform(img, mask):
+                img = first_transform_img(img)
+                mask = first_transform_mask(mask)
+                if random.random() > 0.5:
+                    img = TF.hflip(img)
+                    mask = TF.hflip(mask)
+                img = TF.to_tensor(img)
+                img = TF.normalize(img, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                mask = TF.to_tensor(mask)
+                mask = (mask > 0.5).float()
+                return img, mask
+
+            def test_transform(img, mask):
+                img = first_transform_img(img)
+                mask = first_transform_mask(mask)
+                img = TF.to_tensor(img)
+                img = TF.normalize(img, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                mask = TF.to_tensor(mask)
+                mask = (mask > 0.5).float()
+                return img, mask
+
+            def train_transform_img_only(img):
+                img = first_transform_img(img)
+                if random.random() > 0.5:
+                    img = TF.hflip(img)
+                img = TF.to_tensor(img)
+                img = TF.normalize(img, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                return img
+
+            def test_transform_img_only(img):
+                img = first_transform_img(img)
+                img = TF.to_tensor(img)
+                img = TF.normalize(img, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                return img
+
+            trainA_mask_dir = os.path.join('dataset', self.dataset, 'trainA_mask')
+            testA_mask_dir = os.path.join('dataset', self.dataset, 'testA_mask')
+            if not os.path.isdir(trainA_mask_dir) or not os.path.isdir(testA_mask_dir):
+                raise FileNotFoundError('trainA_mask or testA_mask directory not found')
+            self.trainA = ImageMaskFolder(
+                os.path.join('dataset', self.dataset, 'trainA'),
+                trainA_mask_dir,
+                transform=train_transform,
+            )
+            self.testA = ImageMaskFolder(
+                os.path.join('dataset', self.dataset, 'testA'),
+                testA_mask_dir,
+                transform=test_transform,
+            )
+        else:
+            first_transform = (
+                ResizeCenterCrop((self.img_size, self.img_w))
+                if self.center_crop
+                else transforms.Resize((self.img_size, self.img_w))
+            )
+            train_transform = transforms.Compose([
+                first_transform,
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+            ])
+            test_transform = transforms.Compose([
+                first_transform,
+                transforms.ToTensor(),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+            ])
+            self.trainA = ImageFolder(
+                os.path.join('dataset', self.dataset, 'trainA'), train_transform
+            )
+            self.testA = ImageFolder(
+                os.path.join('dataset', self.dataset, 'testA'), test_transform
+            )
+
+        self.trainB = ImageFolder(
+            os.path.join('dataset', self.dataset, 'trainB'),
+            train_transform if not self.use_mask_a else train_transform_img_only,
+        )
+        self.testB = ImageFolder(
+            os.path.join('dataset', self.dataset, 'testB'),
+            test_transform if not self.use_mask_a else test_transform_img_only,
+        )
         self.trainA_loader = DataLoader(self.trainA, batch_size=self.batch_size, shuffle=True)
         self.trainB_loader = DataLoader(self.trainB, batch_size=self.batch_size, shuffle=True)
         self.testA_loader = DataLoader(self.testA, batch_size=1, shuffle=False)
         self.testB_loader = DataLoader(self.testB, batch_size=1, shuffle=False)
 
         """ Define Generator, Discriminator """
-        self.genA2B = ResnetGenerator(input_nc=3, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
+        in_ch_A2B = 4 if self.use_mask_a else 3
+        self.genA2B = ResnetGenerator(input_nc=in_ch_A2B, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
                                       img_height=self.img_size, img_width=self.img_w,
                                       light=self.light).to(self.device)
         self.genB2A = ResnetGenerator(input_nc=3, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
@@ -193,27 +273,43 @@ class UGATIT(object) :
                 self.G_optim.param_groups[0]['lr'] -= (self.lr / (self.iteration // 2))
                 self.D_optim.param_groups[0]['lr'] -= (self.lr / (self.iteration // 2))
 
-            try:
-                real_A, _ = trainA_iter.next()
-            except:
-                trainA_iter = iter(self.trainA_loader)
-                real_A, _ = trainA_iter.next()
+            if self.use_mask_a:
+                try:
+                    real_A_img, real_A_mask = trainA_iter.next()
+                except:
+                    trainA_iter = iter(self.trainA_loader)
+                    real_A_img, real_A_mask = trainA_iter.next()
+                real_A_img = real_A_img.to(self.device)
+                real_A_mask = real_A_mask.to(self.device)
+                real_A_input = torch.cat([real_A_img, real_A_mask], dim=1)
+            else:
+                try:
+                    real_A_img, _ = trainA_iter.next()
+                except:
+                    trainA_iter = iter(self.trainA_loader)
+                    real_A_img, _ = trainA_iter.next()
+                real_A_img = real_A_img.to(self.device)
+                real_A_input = real_A_img
 
             try:
                 real_B, _ = trainB_iter.next()
             except:
                 trainB_iter = iter(self.trainB_loader)
                 real_B, _ = trainB_iter.next()
-
-            real_A, real_B = real_A.to(self.device), real_B.to(self.device)
+            real_B = real_B.to(self.device)
+            real_B_input = (
+                torch.cat([real_B, torch.ones_like(real_B[:, :1])], dim=1)
+                if self.use_mask_a
+                else real_B
+            )
 
             # Update D
             self.D_optim.zero_grad()
-            fake_A2B, _, _ = self._call(self.genA2B, real_A)
+            fake_A2B, _, _ = self._call(self.genA2B, real_A_input)
             fake_B2A, _, _ = self._call(self.genB2A, real_B)
 
-            real_GA_logit, real_GA_cam_logit, _ = self._call(self.disGA, real_A)
-            real_LA_logit, real_LA_cam_logit, _ = self._call(self.disLA, real_A)
+            real_GA_logit, real_GA_cam_logit, _ = self._call(self.disGA, real_A_img)
+            real_LA_logit, real_LA_cam_logit, _ = self._call(self.disLA, real_A_img)
             real_GB_logit, real_GB_cam_logit, _ = self._call(self.disGB, real_B)
             real_LB_logit, real_LB_cam_logit, _ = self._call(self.disLB, real_B)
 
@@ -245,14 +341,19 @@ class UGATIT(object) :
 
             # Update G
             self.G_optim.zero_grad()
-            fake_A2B, fake_A2B_cam_logit, _ = self._call(self.genA2B, real_A)
+            fake_A2B, fake_A2B_cam_logit, _ = self._call(self.genA2B, real_A_input)
             fake_B2A, fake_B2A_cam_logit, _ = self._call(self.genB2A, real_B)
 
             fake_A2B2A, _, _ = self._call(self.genB2A, fake_A2B)
-            fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A)
+            fake_B2A2B, _, _ = self._call(
+                self.genA2B,
+                torch.cat([fake_B2A, torch.ones_like(fake_B2A[:, :1])], dim=1)
+                if self.use_mask_a
+                else fake_B2A,
+            )
 
-            fake_A2A, fake_A2A_cam_logit, _ = self._call(self.genB2A, real_A)
-            fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B)
+            fake_A2A, fake_A2A_cam_logit, _ = self._call(self.genB2A, real_A_img)
+            fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B_input)
 
             fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
             fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
@@ -268,10 +369,10 @@ class UGATIT(object) :
             G_ad_loss_LB = self.MSE_loss(fake_LB_logit, torch.ones_like(fake_LB_logit).to(self.device))
             G_ad_cam_loss_LB = self.MSE_loss(fake_LB_cam_logit, torch.ones_like(fake_LB_cam_logit).to(self.device))
 
-            G_recon_loss_A = self.L1_loss(fake_A2B2A, real_A)
+            G_recon_loss_A = self.L1_loss(fake_A2B2A, real_A_img)
             G_recon_loss_B = self.L1_loss(fake_B2A2B, real_B)
 
-            G_identity_loss_A = self.L1_loss(fake_A2A, real_A)
+            G_identity_loss_A = self.L1_loss(fake_A2A, real_A_img)
             G_identity_loss_B = self.L1_loss(fake_B2B, real_B)
 
             G_cam_loss_A = self.BCE_loss(fake_B2A_cam_logit, torch.ones_like(fake_B2A_cam_logit).to(self.device)) + self.BCE_loss(fake_A2A_cam_logit, torch.zeros_like(fake_A2A_cam_logit).to(self.device))
@@ -310,28 +411,52 @@ class UGATIT(object) :
                 with torch.no_grad():
                     for _ in range(train_sample_num):
                         try:
-                            real_A, _ = trainA_iter.next()
+                            if self.use_mask_a:
+                                real_A_img, real_A_mask = trainA_iter.next()
+                            else:
+                                real_A_img, _ = trainA_iter.next()
                         except:
                             trainA_iter = iter(self.trainA_loader)
-                            real_A, _ = trainA_iter.next()
+                            if self.use_mask_a:
+                                real_A_img, real_A_mask = trainA_iter.next()
+                            else:
+                                real_A_img, _ = trainA_iter.next()
 
                         try:
                             real_B, _ = trainB_iter.next()
                         except:
                             trainB_iter = iter(self.trainB_loader)
                             real_B, _ = trainB_iter.next()
-                        real_A, real_B = real_A.to(self.device), real_B.to(self.device)
 
-                        fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
+                        real_B = real_B.to(self.device)
+                        real_B_input = (
+                            torch.cat([real_B, torch.ones_like(real_B[:, :1])], dim=1)
+                            if self.use_mask_a
+                            else real_B
+                        )
+
+                        if self.use_mask_a:
+                            real_A_img = real_A_img.to(self.device)
+                            real_A_mask = real_A_mask.to(self.device)
+                            real_A_input = torch.cat([real_A_img, real_A_mask], dim=1)
+                        else:
+                            real_A_img = real_A_img.to(self.device)
+                            real_A_input = real_A_img
+
+                        fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A_input)
                         fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
 
                         fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                        fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A)
+                        fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(
+                            torch.cat([fake_B2A, torch.ones_like(fake_B2A[:, :1])], dim=1)
+                            if self.use_mask_a
+                            else fake_B2A
+                        )
 
-                        fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
-                        fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
+                        fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A_img)
+                        fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B_input)
 
-                        A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A[0]))),
+                        A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A_img[0]))),
                                                                    cam(tensor2numpy(fake_A2A_heatmap[0]), (self.img_size, self.img_w)),
                                                                    RGB2BGR(tensor2numpy(denorm(fake_A2A[0]))),
                                                                    cam(tensor2numpy(fake_A2B_heatmap[0]), (self.img_size, self.img_w)),
@@ -349,28 +474,52 @@ class UGATIT(object) :
 
                     for _ in range(test_sample_num):
                         try:
-                            real_A, _ = testA_iter.next()
+                            if self.use_mask_a:
+                                real_A_img, real_A_mask = testA_iter.next()
+                            else:
+                                real_A_img, _ = testA_iter.next()
                         except:
                             testA_iter = iter(self.testA_loader)
-                            real_A, _ = testA_iter.next()
+                            if self.use_mask_a:
+                                real_A_img, real_A_mask = testA_iter.next()
+                            else:
+                                real_A_img, _ = testA_iter.next()
 
                         try:
                             real_B, _ = testB_iter.next()
                         except:
                             testB_iter = iter(self.testB_loader)
                             real_B, _ = testB_iter.next()
-                        real_A, real_B = real_A.to(self.device), real_B.to(self.device)
 
-                        fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
+                        real_B = real_B.to(self.device)
+                        real_B_input = (
+                            torch.cat([real_B, torch.ones_like(real_B[:, :1])], dim=1)
+                            if self.use_mask_a
+                            else real_B
+                        )
+
+                        if self.use_mask_a:
+                            real_A_img = real_A_img.to(self.device)
+                            real_A_mask = real_A_mask.to(self.device)
+                            real_A_input = torch.cat([real_A_img, real_A_mask], dim=1)
+                        else:
+                            real_A_img = real_A_img.to(self.device)
+                            real_A_input = real_A_img
+
+                        fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A_input)
                         fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
 
                         fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                        fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A)
+                        fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(
+                            torch.cat([fake_B2A, torch.ones_like(fake_B2A[:, :1])], dim=1)
+                            if self.use_mask_a
+                            else fake_B2A
+                        )
 
-                        fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
-                        fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
+                        fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A_img)
+                        fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B_input)
 
-                        A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A[0]))),
+                        A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A_img[0]))),
                                                                    cam(tensor2numpy(fake_A2A_heatmap[0]), (self.img_size, self.img_w)),
                                                                    RGB2BGR(tensor2numpy(denorm(fake_A2A[0]))),
                                                                    cam(tensor2numpy(fake_A2B_heatmap[0]), (self.img_size, self.img_w)),
@@ -461,10 +610,17 @@ class UGATIT(object) :
         check_folder(out_B2A_dir)
 
         with torch.no_grad():
-            for n, (real_A, _) in enumerate(self.testA_loader):
-                real_A = real_A.to(self.device)
+            for n, batch in enumerate(self.testA_loader):
+                if self.use_mask_a:
+                    real_A_img, real_A_mask = batch
+                    real_A_img = real_A_img.to(self.device)
+                    real_A_mask = real_A_mask.to(self.device)
+                    real_A_input = torch.cat([real_A_img, real_A_mask], dim=1)
+                else:
+                    real_A_img = batch[0].to(self.device)
+                    real_A_input = real_A_img
 
-                fake_A2B, _, _ = self._call(self.genA2B, real_A)
+                fake_A2B, _, _ = self._call(self.genA2B, real_A_input)
 
                 out_A2B = RGB2BGR(tensor2numpy(denorm(fake_A2B[0])))
 
@@ -474,7 +630,6 @@ class UGATIT(object) :
 
             for n, (real_B, _) in enumerate(self.testB_loader):
                 real_B = real_B.to(self.device)
-
                 fake_B2A, _, _ = self._call(self.genB2A, real_B)
 
                 out_B2A = RGB2BGR(tensor2numpy(denorm(fake_B2A[0])))

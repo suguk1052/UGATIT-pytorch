@@ -19,29 +19,23 @@ The results of the paper came from the **Tensorflow code**
 ```
 ├── dataset
    └── YOUR_DATASET_NAME
-       ├── trainA
-            ├── xxx.jpg (name, format doesn't matter)
-            ├── yyy.png
-            └── ...
-       ├── trainB
-            ├── zzz.jpg
-            ├── www.png
-            └── ...
        ├── testA
-            ├── aaa.jpg
-            ├── bbb.png
-            └── ...
-       └── testB
-            ├── ccc.jpg
-            ├── ddd.png
-            └── ...
+       ├── testA_mask
+       ├── testB
+       ├── trainA         # 3‑ch images
+       ├── trainA_mask    # 1‑ch masks, 0 = shoe, 1 = background
+       └── trainB
 ```
+
+Mask files must share the same base filename as their corresponding images
+(e.g. `trainA/0001.png` ↔ `trainA_mask/0001.png`). Masks may be saved with
+pixel values 0 and 255 but are normalized to 0/1 during loading.
 
 ### Domain A preprocessing (optional)
 
-If you need to crop and augment domain A images before training, place the
-original files under `preprocess_source/trainA` and `preprocess_source/testA`
-and run:
+If you need to crop and augment domain A images before training, create
+`preprocess_source/trainA` and `preprocess_source/testA` (plus optional
+`trainA_mask` and `testA_mask`) and place your original files there. Then run:
 
 ```
 python preprocess_a.py --dataset_name YOUR_DATASET_NAME [--bottom]
@@ -53,18 +47,19 @@ By default the script keeps only the top 40 % of each image, fading to neutral
 gray across the 35–45 % band using a Gaussian kernel. With the `--bottom` flag,
 it instead retains the bottom 30 %, fading the 65–75 % band. The resulting
 canvas undergoes random translations up to ±10 pixels and random rotations up to
-±10°, with any exposed regions filled with the same gray. The output is scaled
-to cover a 512×512 frame while keeping aspect ratio and cropped so the row at
-20 % (or 93 % when using `--bottom`) of the original height falls at the canvas
-center. Each processed file keeps the original base name and is written to
-`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`. After
-running this preprocessing step you can proceed with the usual training command
-below.
+±15°, with any exposed regions filled with the same gray. The same geometric
+operations are applied to masks (using nearest‑neighbor interpolation) so that
+`trainA_mask` and `testA_mask` stay aligned with their corresponding images.
+The output files keep the original base name and are written to
+`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA` (and
+their `_mask` counterparts when masks are provided). After running this
+preprocessing step you can proceed with the usual training command below.
 
 ### Train
 ```
-> python main.py --dataset selfie2anime
+> python main.py --dataset selfie2anime [--use_mask_a]
 ```
+* Add `--use_mask_a` to feed domain A masks as a 4th channel.
 * If the memory of gpu is **not sufficient**, set `--light` to True
 * Save memory with `--use_checkpoint` for gradient checkpointing
 * To train with a rectangular resolution, set `--aspect_ratio <width/height>`.
