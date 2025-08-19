@@ -51,6 +51,7 @@ class UGATIT(object) :
         self.bg_adv_weight = args.bg_adv_weight
         self.bg_cx_weight = args.bg_cx_weight
         self.bg_tv_weight = args.bg_tv_weight
+        self.log_all_losses = args.log_all_losses
 
         """ Generator """
         self.n_res = args.n_res
@@ -415,6 +416,7 @@ class UGATIT(object) :
                 + self.cam_weight * G_cam_loss_B
 
             bg_loss = 0
+            G_bg_adv = cx_loss = tv_loss = 0
             if self.use_mask_a:
                 mask_bg = real_A_mask
                 mask_bg_3 = mask_bg.repeat(1, 3, 1, 1)
@@ -428,7 +430,11 @@ class UGATIT(object) :
                     m = F.interpolate(mask_bg, size=f_fake.shape[-2:], mode='nearest')
                     cx_loss += contextual_loss(f_fake * m, f_ref * m)
                 tv_loss = total_variation_loss(fake_A2B * mask_bg_3)
-                bg_loss = self.bg_adv_weight * G_bg_adv + self.bg_cx_weight * cx_loss + self.bg_tv_weight * tv_loss
+                bg_loss = (
+                    self.bg_adv_weight * G_bg_adv
+                    + self.bg_cx_weight * cx_loss
+                    + self.bg_tv_weight * tv_loss
+                )
 
             Generator_loss = G_loss_A + G_loss_B + bg_loss
             if torch.isnan(Generator_loss):
@@ -441,7 +447,25 @@ class UGATIT(object) :
             self.genA2B.apply(self.Rho_clipper)
             self.genB2A.apply(self.Rho_clipper)
 
-            print("[%5d/%5d] time: %4.4f d_loss: %.8f, g_loss: %.8f" % (step, self.iteration, time.time() - start_time, Discriminator_loss, Generator_loss))
+            elapsed = time.time() - start_time
+            if self.log_all_losses:
+                log = (
+                    f"[{step:5d}/{self.iteration:5d}] time: {elapsed:4.4f}\n"
+                    f"  D: total:{Discriminator_loss:.8f} A:{D_loss_A:.4f} B:{D_loss_B:.4f} bg:{(self.bg_adv_weight * D_bg_loss):.4f}\n"
+                    f"     ad_GA:{D_ad_loss_GA:.4f} cam_GA:{D_ad_cam_loss_GA:.4f} ad_LA:{D_ad_loss_LA:.4f} cam_LA:{D_ad_cam_loss_LA:.4f}\n"
+                    f"     ad_GB:{D_ad_loss_GB:.4f} cam_GB:{D_ad_cam_loss_GB:.4f} ad_LB:{D_ad_loss_LB:.4f} cam_LB:{D_ad_cam_loss_LB:.4f}\n"
+                    f"  G: total:{Generator_loss:.8f} A:{G_loss_A:.4f} B:{G_loss_B:.4f} bg:{bg_loss:.4f}\n"
+                    f"     ad_GA:{G_ad_loss_GA:.4f} cam_GA:{G_ad_cam_loss_GA:.4f} ad_LA:{G_ad_loss_LA:.4f} cam_LA:{G_ad_cam_loss_LA:.4f}\n"
+                    f"     ad_GB:{G_ad_loss_GB:.4f} cam_GB:{G_ad_cam_loss_GB:.4f} ad_LB:{G_ad_loss_LB:.4f} cam_LB:{G_ad_cam_loss_LB:.4f}\n"
+                    f"     cycle_A:{G_recon_loss_A:.4f} idt_A:{G_identity_loss_A:.4f} cam_A:{G_cam_loss_A:.4f}\n"
+                    f"     cycle_B:{G_recon_loss_B:.4f} idt_B:{G_identity_loss_B:.4f} cam_B:{G_cam_loss_B:.4f}\n"
+                    f"     bg_adv:{G_bg_adv:.4f} bg_cx:{cx_loss:.4f} bg_tv:{tv_loss:.4f}"
+                )
+                print(log)
+            else:
+                print(
+                    f"[{step:5d}/{self.iteration:5d}] time: {elapsed:4.4f} d_loss: {Discriminator_loss:.8f}, g_loss: {Generator_loss:.8f}"
+                )
             if step % self.print_freq == 0:
                 train_sample_num = 5
                 test_sample_num = 5

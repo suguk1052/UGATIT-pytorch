@@ -50,6 +50,8 @@ def parse_args():
                         help='The iteration of checkpoints to load for testing')
     parser.add_argument('--use_checkpoint', type=str2bool, default=False,
                         help='enable gradient checkpointing')
+    parser.add_argument('--log_all_losses', action='store_true',
+                        help='Print individual loss components during training')
 
     args = parser.parse_args()
     args.img_w = int(args.img_size * args.aspect_ratio)
