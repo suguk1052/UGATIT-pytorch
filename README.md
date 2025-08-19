@@ -19,12 +19,12 @@ The results of the paper came from the **Tensorflow code**
 ```
 ├── dataset
    └── YOUR_DATASET_NAME
-       ├── trainA         # 3‑ch images
-       ├── trainA_mask    # 1‑ch masks, 0 = shoe, 1 = background
-       ├── trainB
        ├── testA
        ├── testA_mask
-       └── testB
+       ├── testB
+       ├── trainA         # 3‑ch images
+       ├── trainA_mask    # 1‑ch masks, 0 = shoe, 1 = background
+       └── trainB
 ```
 
 Mask files must share the same base filename as their corresponding images
@@ -47,7 +47,7 @@ By default the script keeps only the top 40 % of each image, fading to neutral
 gray across the 35–45 % band using a Gaussian kernel. With the `--bottom` flag,
 it instead retains the bottom 30 %, fading the 65–75 % band. The resulting
 canvas undergoes random translations up to ±10 pixels and random rotations up to
-±10°, with any exposed regions filled with the same gray. The same geometric
+±15°, with any exposed regions filled with the same gray. The same geometric
 operations are applied to masks (using nearest‑neighbor interpolation) so that
 `trainA_mask` and `testA_mask` stay aligned with their corresponding images.
 The output files keep the original base name and are written to

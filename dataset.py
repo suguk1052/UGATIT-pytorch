@@ -110,7 +110,7 @@ class ImageFolder(DatasetFolder):
 
 
 class ImageMaskFolder(data.Dataset):
-    """Dataset returning images concatenated with corresponding masks."""
+    """Dataset returning paired images and masks."""
 
     def __init__(self, img_root, mask_root, transform=None):
         self.img_root = img_root
@@ -138,5 +138,4 @@ class ImageMaskFolder(data.Dataset):
         mask = Image.open(mask_path).convert('L')
         if self.transform is not None:
             img, mask = self.transform(img, mask)
-        sample = torch.cat([img, mask], dim=0)
-        return sample, 0
+        return img, mask
