@@ -452,14 +452,14 @@ class UGATIT(object) :
                 log = (
                     f"[{step:5d}/{self.iteration:5d}] time: {elapsed:4.4f}\n"
                     f"  D: total:{Discriminator_loss:.8f} A:{D_loss_A:.4f} B:{D_loss_B:.4f} bg:{(self.bg_adv_weight * D_bg_loss):.4f}\n"
-                    f"     ad_GA:{D_ad_loss_GA:.4f} cam_GA:{D_ad_cam_loss_GA:.4f} ad_LA:{D_ad_loss_LA:.4f} cam_LA:{D_ad_cam_loss_LA:.4f}\n"
-                    f"     ad_GB:{D_ad_loss_GB:.4f} cam_GB:{D_ad_cam_loss_GB:.4f} ad_LB:{D_ad_loss_LB:.4f} cam_LB:{D_ad_cam_loss_LB:.4f}\n"
+                    f"     ad_GA:{0.5 * self.adv_weight * D_ad_loss_GA:.4f} cam_GA:{0.5 * self.adv_weight * D_ad_cam_loss_GA:.4f} ad_LA:{0.5 * self.adv_weight * D_ad_loss_LA:.4f} cam_LA:{0.5 * self.adv_weight * D_ad_cam_loss_LA:.4f}\n"
+                    f"     ad_GB:{0.5 * self.adv_weight * D_ad_loss_GB:.4f} cam_GB:{0.5 * self.adv_weight * D_ad_cam_loss_GB:.4f} ad_LB:{0.5 * self.adv_weight * D_ad_loss_LB:.4f} cam_LB:{0.5 * self.adv_weight * D_ad_cam_loss_LB:.4f}\n"
                     f"  G: total:{Generator_loss:.8f} A:{G_loss_A:.4f} B:{G_loss_B:.4f} bg:{bg_loss:.4f}\n"
-                    f"     ad_GA:{G_ad_loss_GA:.4f} cam_GA:{G_ad_cam_loss_GA:.4f} ad_LA:{G_ad_loss_LA:.4f} cam_LA:{G_ad_cam_loss_LA:.4f}\n"
-                    f"     ad_GB:{G_ad_loss_GB:.4f} cam_GB:{G_ad_cam_loss_GB:.4f} ad_LB:{G_ad_loss_LB:.4f} cam_LB:{G_ad_cam_loss_LB:.4f}\n"
-                    f"     cycle_A:{G_recon_loss_A:.4f} idt_A:{G_identity_loss_A:.4f} cam_A:{G_cam_loss_A:.4f}\n"
-                    f"     cycle_B:{G_recon_loss_B:.4f} idt_B:{G_identity_loss_B:.4f} cam_B:{G_cam_loss_B:.4f}\n"
-                    f"     bg_adv:{G_bg_adv:.4f} bg_cx:{cx_loss:.4f} bg_tv:{tv_loss:.4f}"
+                    f"     ad_GA:{0.5 * self.adv_weight * G_ad_loss_GA:.4f} cam_GA:{0.5 * self.adv_weight * G_ad_cam_loss_GA:.4f} ad_LA:{0.5 * self.adv_weight * G_ad_loss_LA:.4f} cam_LA:{0.5 * self.adv_weight * G_ad_cam_loss_LA:.4f}\n"
+                    f"     ad_GB:{0.5 * self.adv_weight * G_ad_loss_GB:.4f} cam_GB:{0.5 * self.adv_weight * G_ad_cam_loss_GB:.4f} ad_LB:{0.5 * self.adv_weight * G_ad_loss_LB:.4f} cam_LB:{0.5 * self.adv_weight * G_ad_cam_loss_LB:.4f}\n"
+                    f"     cycle_A:{self.cycle_weight * G_recon_loss_A:.4f} idt_A:{self.identity_weight * G_identity_loss_A:.4f} cam_A:{self.cam_weight * G_cam_loss_A:.4f}\n"
+                    f"     cycle_B:{self.cycle_weight * G_recon_loss_B:.4f} idt_B:{self.identity_weight * G_identity_loss_B:.4f} cam_B:{self.cam_weight * G_cam_loss_B:.4f}\n"
+                    f"     bg_adv:{self.bg_adv_weight * G_bg_adv:.4f} bg_cx:{self.bg_cx_weight * cx_loss:.4f} bg_tv:{self.bg_tv_weight * tv_loss:.4f}"
                 )
                 print(log)
             else:
