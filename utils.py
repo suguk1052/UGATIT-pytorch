@@ -1,10 +1,19 @@
-from scipy import misc
+try:
+    from scipy import misc
+except Exception:  # pragma: no cover
+    misc = None
 import os
-import cv2
+try:
+    import cv2
+except Exception:  # pragma: no cover
+    cv2 = None
 import torch
 import numpy as np
 from PIL import Image, ImageOps
 from torchvision.transforms import functional as TF
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import models
 
 def load_test_data(image_path, size=256):
     img = misc.imread(image_path, mode='RGB')
@@ -70,6 +79,59 @@ def tensor2numpy(x):
 
 def RGB2BGR(x):
     return cv2.cvtColor(x, cv2.COLOR_RGB2BGR)
+
+
+class VGG19FeatureExtractor(nn.Module):
+    """VGG19 network returning intermediate feature maps."""
+
+    def __init__(self, layers=(17, 26)):
+        super().__init__()
+        try:
+            vgg = models.vgg19(pretrained=True)
+        except Exception:
+            vgg = models.vgg19(pretrained=False)
+        self.features = vgg.features
+        self.layers = set(layers)
+        for p in self.features.parameters():
+            p.requires_grad = False
+
+    def forward(self, x):
+        x = imagenet_norm(x)
+        feats = []
+        for i, layer in enumerate(self.features):
+            x = layer(x)
+            if i in self.layers:
+                feats.append(x)
+        return feats
+
+
+def contextual_loss(x, y, h=0.5, eps=1e-5):
+    """Computes Contextual Loss between feature maps x and y."""
+    N, C, H, W = x.size()
+    x = x.view(N, C, -1)
+    y = y.view(N, C, -1)
+    x = F.normalize(x, dim=1)
+    y = F.normalize(y, dim=1)
+    x = x.permute(0, 2, 1)
+    y = y.permute(0, 2, 1)
+    x_norm = (x ** 2).sum(dim=2, keepdim=True)
+    y_norm = (y ** 2).sum(dim=2, keepdim=True)
+    dist = x_norm + y_norm.transpose(1, 2) - 2 * torch.bmm(x, y.transpose(1, 2))
+    dist = torch.sqrt(F.relu(dist) + eps)
+    dist_min, _ = dist.min(dim=2, keepdim=True)
+    relative_dist = dist / (dist_min + eps)
+    w = torch.exp((1 - relative_dist) / h)
+    cx = w / (w.sum(dim=2, keepdim=True) + eps)
+    cx_i, _ = cx.max(dim=2)
+    loss = torch.mean(-torch.log(cx_i + eps))
+    return loss
+
+
+def total_variation_loss(x):
+    """Total variation loss for spatial smoothness."""
+    loss = torch.mean(torch.abs(x[:, :, 1:, :] - x[:, :, :-1, :]))
+    loss += torch.mean(torch.abs(x[:, :, :, 1:] - x[:, :, :, :-1]))
+    return loss
 
 
 class ResizeCenterCrop:

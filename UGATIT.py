@@ -7,6 +7,7 @@ from networks import *
 from utils import *
 from utils import ResizeCenterCrop
 import torch
+import torch.nn.functional as F
 import random
 import os
 from PIL import Image
@@ -47,6 +48,9 @@ class UGATIT(object) :
         self.cycle_weight = args.cycle_weight
         self.identity_weight = args.identity_weight
         self.cam_weight = args.cam_weight
+        self.bg_adv_weight = args.bg_adv_weight
+        self.bg_cx_weight = args.bg_cx_weight
+        self.bg_tv_weight = args.bg_tv_weight
 
         """ Generator """
         self.n_res = args.n_res
@@ -99,6 +103,9 @@ class UGATIT(object) :
         print("# cycle_weight : ", self.cycle_weight)
         print("# identity_weight : ", self.identity_weight)
         print("# cam_weight : ", self.cam_weight)
+        print("# bg_adv_weight : ", self.bg_adv_weight)
+        print("# bg_cx_weight : ", self.bg_cx_weight)
+        print("# bg_tv_weight : ", self.bg_tv_weight)
 
 
 
@@ -246,6 +253,10 @@ class UGATIT(object) :
         """ Define Rho clipper to constraint the value of rho in AdaILN and ILN"""
         self.Rho_clipper = RhoClipper(0, 1)
 
+        # VGG19 feature extractor for contextual loss
+        self.vgg = VGG19FeatureExtractor().to(self.device)
+        self.vgg.eval()
+
     def train(self):
         self.genA2B.train(), self.genB2A.train(), self.disGA.train(), self.disGB.train(), self.disLA.train(), self.disLB.train()
 
@@ -326,13 +337,21 @@ class UGATIT(object) :
             D_ad_cam_loss_GB = self.MSE_loss(real_GB_cam_logit, torch.ones_like(real_GB_cam_logit).to(self.device)) + self.MSE_loss(fake_GB_cam_logit, torch.zeros_like(fake_GB_cam_logit).to(self.device))
             D_ad_loss_LB = self.MSE_loss(real_LB_logit, torch.ones_like(real_LB_logit).to(self.device)) + self.MSE_loss(fake_LB_logit, torch.zeros_like(fake_LB_logit).to(self.device))
             D_ad_cam_loss_LB = self.MSE_loss(real_LB_cam_logit, torch.ones_like(real_LB_cam_logit).to(self.device)) + self.MSE_loss(fake_LB_cam_logit, torch.zeros_like(fake_LB_cam_logit).to(self.device))
+            if self.use_mask_a:
+                mask_bg = real_A_mask
+                mask_bg_3 = mask_bg.repeat(1, 3, 1, 1)
+                real_B_bg_logit, _, _ = self._call(self.disGB, real_B * mask_bg_3)
+                fake_B_bg_logit, _, _ = self._call(self.disGB, (fake_A2B.detach()) * mask_bg_3)
+                D_bg_loss = self.MSE_loss(real_B_bg_logit, torch.ones_like(real_B_bg_logit).to(self.device)) + self.MSE_loss(fake_B_bg_logit, torch.zeros_like(fake_B_bg_logit).to(self.device))
+            else:
+                D_bg_loss = 0
 
             D_loss_A = self.adv_weight * 0.5 * (
                 D_ad_loss_GA + D_ad_cam_loss_GA + D_ad_loss_LA + D_ad_cam_loss_LA)
             D_loss_B = self.adv_weight * 0.5 * (
                 D_ad_loss_GB + D_ad_cam_loss_GB + D_ad_loss_LB + D_ad_cam_loss_LB)
 
-            Discriminator_loss = D_loss_A + D_loss_B
+            Discriminator_loss = D_loss_A + D_loss_B + self.bg_adv_weight * D_bg_loss
             if torch.isnan(Discriminator_loss):
                 print('Warning: discriminator loss is NaN; skipping update')
             else:
@@ -389,7 +408,23 @@ class UGATIT(object) :
                 + self.identity_weight * G_identity_loss_B \
                 + self.cam_weight * G_cam_loss_B
 
-            Generator_loss = G_loss_A + G_loss_B
+            bg_loss = 0
+            if self.use_mask_a:
+                mask_bg = real_A_mask
+                mask_bg_3 = mask_bg.repeat(1, 3, 1, 1)
+                fake_bg_logit, _, _ = self._call(self.disGB, fake_A2B * mask_bg_3)
+                G_bg_adv = self.MSE_loss(fake_bg_logit, torch.ones_like(fake_bg_logit).to(self.device))
+                ref_B = real_B
+                feat_fake = self.vgg(fake_A2B)
+                feat_ref = self.vgg(ref_B)
+                cx_loss = 0
+                for f_fake, f_ref in zip(feat_fake, feat_ref):
+                    m = F.interpolate(mask_bg, size=f_fake.shape[-2:], mode='nearest')
+                    cx_loss += contextual_loss(f_fake * m, f_ref * m)
+                tv_loss = total_variation_loss(fake_A2B * mask_bg_3)
+                bg_loss = self.bg_adv_weight * G_bg_adv + self.bg_cx_weight * cx_loss + self.bg_tv_weight * tv_loss
+
+            Generator_loss = G_loss_A + G_loss_B + bg_loss
             if torch.isnan(Generator_loss):
                 print('Warning: generator loss is NaN; skipping update')
             else:

@@ -23,6 +23,12 @@ def parse_args():
     parser.add_argument('--cycle_weight', type=int, default=10, help='Weight for Cycle')
     parser.add_argument('--identity_weight', type=int, default=10, help='Weight for Identity')
     parser.add_argument('--cam_weight', type=int, default=1000, help='Weight for CAM')
+    parser.add_argument('--bg_adv_weight', type=float, default=1.0,
+                        help='Weight for background adversarial loss')
+    parser.add_argument('--bg_cx_weight', type=float, default=1.0,
+                        help='Weight for background contextual loss')
+    parser.add_argument('--bg_tv_weight', type=float, default=0.05,
+                        help='Weight for background total variation loss')
 
     parser.add_argument('--ch', type=int, default=64, help='base channel number per layer')
     parser.add_argument('--n_res', type=int, default=4, help='The number of resblock')
