@@ -75,10 +75,11 @@ def RGB2BGR(x):
 class ResizeCenterCrop:
     """Resize keeping aspect ratio and center crop to target size."""
 
-    def __init__(self, size):
+    def __init__(self, size, interpolation=Image.BICUBIC):
         if isinstance(size, int):
             size = (size, size)
         self.size = size  # (h, w)
+        self.interpolation = interpolation
 
     def __call__(self, img: Image.Image) -> Image.Image:
         target_h, target_w = self.size
@@ -86,7 +87,7 @@ class ResizeCenterCrop:
         scale = max(target_w / w, target_h / h)
         new_w = int(round(w * scale))
         new_h = int(round(h * scale))
-        img = img.resize((new_w, new_h), Image.BICUBIC)
+        img = img.resize((new_w, new_h), self.interpolation)
 
         left = max(0, (new_w - target_w) // 2)
         top = max(0, (new_h - target_h) // 2)

@@ -1,11 +1,15 @@
 import time, itertools
-from dataset import ImageFolder
+from dataset import ImageFolder, ImageMaskFolder
 from torchvision import transforms
+from torchvision.transforms import functional as TF
 from torch.utils.data import DataLoader
 from networks import *
 from utils import *
 from utils import ResizeCenterCrop
 import torch
+import random
+import os
+from PIL import Image
 try:
     import torch.utils.checkpoint as checkpoint
     _CHECKPOINT_AVAILABLE = True
@@ -54,6 +58,7 @@ class UGATIT(object) :
         self.aspect_ratio = args.aspect_ratio
         self.img_w = int(self.img_size * self.aspect_ratio)
         self.img_ch = args.img_ch
+        self.use_mask_a = args.use_mask_a
 
         self.center_crop = args.center_crop
         self.device = args.device
@@ -118,32 +123,107 @@ class UGATIT(object) :
 
     def build_model(self):
         """ DataLoader """
-        first_transform = ResizeCenterCrop((self.img_size, self.img_w)) if self.center_crop else transforms.Resize((self.img_size, self.img_w))
-        train_transform = transforms.Compose([
-            first_transform,
-            transforms.RandomHorizontalFlip(),
-            # transforms.Resize((self.img_size + 30, self.img_size+30)),
-            # transforms.RandomCrop(self.img_size),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-        ])
-        test_transform = transforms.Compose([
-            first_transform,
-            transforms.ToTensor(),
-            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-        ])
+        if self.use_mask_a:
+            first_transform_img = (
+                ResizeCenterCrop((self.img_size, self.img_w))
+                if self.center_crop
+                else transforms.Resize((self.img_size, self.img_w))
+            )
+            first_transform_mask = (
+                ResizeCenterCrop((self.img_size, self.img_w), interpolation=Image.NEAREST)
+                if self.center_crop
+                else transforms.Resize((self.img_size, self.img_w), interpolation=Image.NEAREST)
+            )
 
-        self.trainA = ImageFolder(os.path.join('dataset', self.dataset, 'trainA'), train_transform)
-        self.trainB = ImageFolder(os.path.join('dataset', self.dataset, 'trainB'), train_transform)
-        self.testA = ImageFolder(os.path.join('dataset', self.dataset, 'testA'), test_transform)
-        self.testB = ImageFolder(os.path.join('dataset', self.dataset, 'testB'), test_transform)
+            def train_transform(img, mask):
+                img = first_transform_img(img)
+                mask = first_transform_mask(mask)
+                if random.random() > 0.5:
+                    img = TF.hflip(img)
+                    mask = TF.hflip(mask)
+                img = TF.to_tensor(img)
+                img = TF.normalize(img, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                mask = TF.to_tensor(mask)
+                mask = (mask > 0.5).float()
+                return img, mask
+
+            def test_transform(img, mask):
+                img = first_transform_img(img)
+                mask = first_transform_mask(mask)
+                img = TF.to_tensor(img)
+                img = TF.normalize(img, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                mask = TF.to_tensor(mask)
+                mask = (mask > 0.5).float()
+                return img, mask
+
+            def train_transform_img_only(img):
+                img = first_transform_img(img)
+                if random.random() > 0.5:
+                    img = TF.hflip(img)
+                img = TF.to_tensor(img)
+                img = TF.normalize(img, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                return img
+
+            def test_transform_img_only(img):
+                img = first_transform_img(img)
+                img = TF.to_tensor(img)
+                img = TF.normalize(img, (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                return img
+
+            trainA_mask_dir = os.path.join('dataset', self.dataset, 'trainA_mask')
+            testA_mask_dir = os.path.join('dataset', self.dataset, 'testA_mask')
+            if not os.path.isdir(trainA_mask_dir) or not os.path.isdir(testA_mask_dir):
+                raise FileNotFoundError('trainA_mask or testA_mask directory not found')
+            self.trainA = ImageMaskFolder(
+                os.path.join('dataset', self.dataset, 'trainA'),
+                trainA_mask_dir,
+                transform=train_transform,
+            )
+            self.testA = ImageMaskFolder(
+                os.path.join('dataset', self.dataset, 'testA'),
+                testA_mask_dir,
+                transform=test_transform,
+            )
+        else:
+            first_transform = (
+                ResizeCenterCrop((self.img_size, self.img_w))
+                if self.center_crop
+                else transforms.Resize((self.img_size, self.img_w))
+            )
+            train_transform = transforms.Compose([
+                first_transform,
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+            ])
+            test_transform = transforms.Compose([
+                first_transform,
+                transforms.ToTensor(),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+            ])
+            self.trainA = ImageFolder(
+                os.path.join('dataset', self.dataset, 'trainA'), train_transform
+            )
+            self.testA = ImageFolder(
+                os.path.join('dataset', self.dataset, 'testA'), test_transform
+            )
+
+        self.trainB = ImageFolder(
+            os.path.join('dataset', self.dataset, 'trainB'),
+            train_transform if not self.use_mask_a else train_transform_img_only,
+        )
+        self.testB = ImageFolder(
+            os.path.join('dataset', self.dataset, 'testB'),
+            test_transform if not self.use_mask_a else test_transform_img_only,
+        )
         self.trainA_loader = DataLoader(self.trainA, batch_size=self.batch_size, shuffle=True)
         self.trainB_loader = DataLoader(self.trainB, batch_size=self.batch_size, shuffle=True)
         self.testA_loader = DataLoader(self.testA, batch_size=1, shuffle=False)
         self.testB_loader = DataLoader(self.testB, batch_size=1, shuffle=False)
 
         """ Define Generator, Discriminator """
-        self.genA2B = ResnetGenerator(input_nc=3, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
+        in_ch_A2B = 4 if self.use_mask_a else 3
+        self.genA2B = ResnetGenerator(input_nc=in_ch_A2B, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
                                       img_height=self.img_size, img_width=self.img_w,
                                       light=self.light).to(self.device)
         self.genB2A = ResnetGenerator(input_nc=3, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
