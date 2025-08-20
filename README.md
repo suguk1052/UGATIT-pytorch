@@ -59,7 +59,8 @@ preprocessing step you can proceed with the usual training command below.
 ```
 > python main.py --dataset selfie2anime [--use_mask_a]
 ```
-* Add `--use_mask_a` to feed domain A masks as a 4th channel.
+* Add `--use_mask_a` to feed domain A masks as a 4th channel and pass them through
+  both generators so the original background can be preserved during the cycle.
 * If the memory of gpu is **not sufficient**, set `--light` to True
 * Save memory with `--use_checkpoint` for gradient checkpointing
 * To train with a rectangular resolution, set `--aspect_ratio <width/height>`.
