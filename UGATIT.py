@@ -252,7 +252,8 @@ class UGATIT(object) :
 
             # Update D
             self.D_optim.zero_grad()
-            fake_A2B, _, _ = self._call(self.genA2B, real_A, None, s_ref)
+            s_ref_detach = s_ref.detach() if s_ref is not None else None
+            fake_A2B, _, _ = self._call(self.genA2B, real_A, None, s_ref_detach)
             fake_B2A, _, _ = self._call(self.genB2A, real_B)
 
             real_GA_logit, real_GA_cam_logit, _ = self._call(self.disGA, real_A)
@@ -290,6 +291,8 @@ class UGATIT(object) :
 
             # Update G
             self.G_optim.zero_grad()
+            if self.use_spade_adalin:
+                s_ref = self.style_enc_B(b_ref)
             fake_A2B, fake_A2B_cam_logit, fake_A2B_heatmap = self._call(self.genA2B, real_A, None, s_ref)
             fake_B2A, fake_B2A_cam_logit, fake_B2A_heatmap = self._call(self.genB2A, real_B)
 
