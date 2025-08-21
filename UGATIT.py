@@ -417,12 +417,12 @@ class UGATIT(object) :
 
                         if self.use_spade_adalin:
                             s_ref = self.style_enc_B(real_B)
-                            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, s_ref)
+                            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, None, s_ref)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
                             fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, s_ref)
+                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, None, s_ref)
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
-                            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, s_ref)
+                            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, None, s_ref)
                         else:
                             fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
@@ -463,12 +463,12 @@ class UGATIT(object) :
 
                         if self.use_spade_adalin:
                             s_ref = self.style_enc_B(real_B)
-                            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, s_ref)
+                            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, None, s_ref)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
                             fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, s_ref)
+                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, None, s_ref)
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
-                            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, s_ref)
+                            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, None, s_ref)
                         else:
                             fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
