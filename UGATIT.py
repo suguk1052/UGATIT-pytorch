@@ -316,8 +316,10 @@ class UGATIT(object) :
 
             if self.use_spade_adalin:
                 m_fg_A = norm_01(fake_A2B_heatmap.detach())
+                m_fg_A = F.interpolate(m_fg_A, size=real_A.size()[2:], mode='bilinear', align_corners=False)
                 w_fg_A, w_bg_A = m_fg_A, 1 - m_fg_A
                 m_fg_B = norm_01(fake_B2A_heatmap.detach())
+                m_fg_B = F.interpolate(m_fg_B, size=real_B.size()[2:], mode='bilinear', align_corners=False)
                 w_fg_B, w_bg_B = m_fg_B, 1 - m_fg_B
 
                 recon_A_fg = torch.mean(torch.abs(w_fg_A * (fake_A2B2A - real_A)))
