@@ -94,3 +94,12 @@ class ResizeCenterCrop:
         bottom = top + target_h
         img = img.crop((left, top, right, bottom))
         return img
+
+
+def norm_01(x: torch.Tensor) -> torch.Tensor:
+    """Normalize tensor to [0,1] range per-sample."""
+    b = x.size(0)
+    flat = x.view(b, -1)
+    min_val = flat.min(dim=1)[0].view(b, 1, 1, 1)
+    max_val = flat.max(dim=1)[0].view(b, 1, 1, 1)
+    return (x - min_val) / (max_val - min_val + 1e-8)

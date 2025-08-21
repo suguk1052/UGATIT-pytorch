@@ -31,6 +31,14 @@ def parse_args():
     parser.add_argument('--style_dim', type=int, default=8, help='dimension of style vector')
     parser.add_argument('--ds_weight', type=float, default=1.0, help='diversity sensitive loss weight')
 
+    parser.add_argument('--use_spade_adalin', type=str2bool, default=False,
+                        help='enable SPADE-AdaLIN in generator')
+    parser.add_argument('--style_nc', type=int, default=256, help='style code dimension')
+    parser.add_argument('--lambda_style', type=float, default=1.0, help='style consistency loss weight')
+    parser.add_argument('--lambda_lowpass', type=float, default=5.0, help='low-pass tone loss weight')
+    parser.add_argument('--fg_bg_cycle_ratio', type=float, default=0.2,
+                        help='background weight ratio for cycle/identity losses')
+
     parser.add_argument('--ch', type=int, default=64, help='base channel number per layer')
     parser.add_argument('--n_res', type=int, default=4, help='The number of resblock')
     parser.add_argument('--n_dis', type=int, default=6, help='The number of discriminator layer')

@@ -1,12 +1,89 @@
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
+import torch.nn.functional as F
+from utils import norm_01
+
+
+class StyleEncoder(nn.Module):
+    """Encode reference image to a style vector."""
+    def __init__(self, in_nc: int = 3, out_dim: int = 256, ch: int = 64):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_nc, ch, 7, 1, 3), nn.ReLU(True),
+            nn.Conv2d(ch, ch * 2, 4, 2, 1), nn.ReLU(True),
+            nn.Conv2d(ch * 2, ch * 4, 4, 2, 1), nn.ReLU(True),
+            nn.Conv2d(ch * 4, ch * 4, 4, 2, 1), nn.ReLU(True),
+            nn.AdaptiveAvgPool2d(1)
+        )
+        self.fc = nn.Linear(ch * 4, out_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.conv(x).flatten(1)
+        s = self.fc(h)
+        return s
+
+
+class AdaLIN(nn.Module):
+    def __init__(self, num_features: int):
+        super().__init__()
+        self.rho = nn.Parameter(torch.Tensor(1, num_features, 1, 1).fill_(0.9))
+        self.eps = 1e-5
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, c, h, w = x.shape
+        in_mean = x.mean(dim=(2, 3), keepdim=True)
+        in_var = x.var(dim=(2, 3), keepdim=True, unbiased=False)
+        x_in = (x - in_mean) / torch.sqrt(in_var + self.eps)
+
+        ln_mean = x.mean(dim=(1, 2, 3), keepdim=True)
+        ln_var = x.var(dim=(1, 2, 3), keepdim=True, unbiased=False)
+        x_ln = (x - ln_mean) / torch.sqrt(ln_var + self.eps)
+
+        rho = torch.clamp(self.rho, 0, 1)
+        return rho * x_in + (1 - rho) * x_ln
+
+
+class SPADEAdaLIN(nn.Module):
+    def __init__(self, num_features: int, cond_nc: int = 257):
+        super().__init__()
+        self.norm = AdaLIN(num_features)
+        self.gamma = nn.Conv2d(cond_nc, num_features, 3, 1, 1)
+        self.beta = nn.Conv2d(cond_nc, num_features, 3, 1, 1)
+
+    def forward(self, x: torch.Tensor, cond: torch.Tensor) -> torch.Tensor:
+        h = self.norm(x)
+        return self.gamma(cond) * h + self.beta(cond)
+
+
+class ResnetSPADEAdaLINBlock(nn.Module):
+    def __init__(self, dim: int, use_bias: bool, cond_nc: int):
+        super().__init__()
+        self.pad1 = nn.ReflectionPad2d(1)
+        self.conv1 = nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=0, bias=use_bias)
+        self.norm1 = SPADEAdaLIN(dim, cond_nc)
+        self.relu1 = nn.ReLU(True)
+
+        self.pad2 = nn.ReflectionPad2d(1)
+        self.conv2 = nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=0, bias=use_bias)
+        self.norm2 = SPADEAdaLIN(dim, cond_nc)
+
+    def forward(self, x: torch.Tensor, cond: torch.Tensor) -> torch.Tensor:
+        out = self.pad1(x)
+        out = self.conv1(out)
+        out = self.norm1(out, cond)
+        out = self.relu1(out)
+        out = self.pad2(out)
+        out = self.conv2(out)
+        out = self.norm2(out, cond)
+        return out + x
 
 
 class ResnetGenerator(nn.Module):
     def __init__(self, input_nc, output_nc, ngf=64, n_blocks=6,
                  img_height=256, img_width=256, light=False,
-                 style_dim=8, use_ds=False):
+                 style_dim=8, use_ds=False,
+                 use_spade_adalin=False, style_nc=256):
         assert(n_blocks >= 0)
         super(ResnetGenerator, self).__init__()
         self.input_nc = input_nc
@@ -18,6 +95,8 @@ class ResnetGenerator(nn.Module):
         self.light = light
         self.style_dim = style_dim
         self.use_ds = use_ds
+        self.use_spade_adalin = use_spade_adalin
+        self.style_nc = style_nc
 
         DownBlock = []
         DownBlock += [nn.ReflectionPad2d(3),
@@ -67,7 +146,11 @@ class ResnetGenerator(nn.Module):
 
         # Up-Sampling Bottleneck
         for i in range(n_blocks):
-            setattr(self, 'UpBlock1_' + str(i+1), ResnetAdaILNBlock(ngf * mult, use_bias=False))
+            if self.use_spade_adalin and i < 2:
+                setattr(self, 'UpBlock1_' + str(i+1),
+                        ResnetSPADEAdaLINBlock(ngf * mult, use_bias=False, cond_nc=256 + 1))
+            else:
+                setattr(self, 'UpBlock1_' + str(i+1), ResnetAdaILNBlock(ngf * mult, use_bias=False))
 
         # Up-Sampling
         UpBlock2 = []
@@ -87,7 +170,10 @@ class ResnetGenerator(nn.Module):
         self.FC = nn.Sequential(*FC)
         self.UpBlock2 = nn.Sequential(*UpBlock2)
 
-    def forward(self, input, z=None):
+        if self.use_spade_adalin:
+            self.style_proj = nn.Conv2d(self.style_nc, 256, 1, 1, 0)
+
+    def forward(self, input, z=None, s=None):
         x = self.DownBlock(input)
 
         gap = torch.nn.functional.adaptive_avg_pool2d(x, 1)
@@ -106,6 +192,15 @@ class ResnetGenerator(nn.Module):
 
         heatmap = torch.sum(x, dim=1, keepdim=True)
 
+        if self.use_spade_adalin and s is not None:
+            s_map = self.style_proj(s.unsqueeze(-1).unsqueeze(-1))
+            s_map = s_map.expand(-1, -1, x.size(2), x.size(3))
+            bg = 1 - norm_01(heatmap)
+            bg = F.interpolate(bg, size=x.size()[2:], mode='bilinear', align_corners=False)
+            cond = torch.cat([s_map, bg], dim=1)
+        else:
+            cond = None
+
         if self.light:
             x_ = torch.nn.functional.adaptive_avg_pool2d(x, 1)
             x_ = self.FC(x_.view(x_.shape[0], -1))
@@ -123,7 +218,11 @@ class ResnetGenerator(nn.Module):
 
 
         for i in range(self.n_blocks):
-            x = getattr(self, 'UpBlock1_' + str(i+1))(x, gamma, beta)
+            block = getattr(self, 'UpBlock1_' + str(i+1))
+            if isinstance(block, ResnetSPADEAdaLINBlock):
+                x = block(x, cond)
+            else:
+                x = block(x, gamma, beta)
         out = self.UpBlock2(x)
 
         return out, cam_logit, heatmap
