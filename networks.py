@@ -6,22 +6,34 @@ from utils import norm_01
 
 
 class StyleEncoder(nn.Module):
-    """Encode reference image to a style vector."""
+    """Encode reference image to foreground and background style vectors."""
+
     def __init__(self, in_nc: int = 3, out_dim: int = 256, ch: int = 64):
         super().__init__()
-        self.conv = nn.Sequential(
+        # convolutional trunk without global pooling
+        self.features = nn.Sequential(
             nn.Conv2d(in_nc, ch, 7, 1, 3), nn.ReLU(True),
             nn.Conv2d(ch, ch * 2, 4, 2, 1), nn.ReLU(True),
             nn.Conv2d(ch * 2, ch * 4, 4, 2, 1), nn.ReLU(True),
             nn.Conv2d(ch * 4, ch * 4, 4, 2, 1), nn.ReLU(True),
-            nn.AdaptiveAvgPool2d(1)
         )
+        self.gap = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(ch * 4, out_dim)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h = self.conv(x).flatten(1)
-        s = self.fc(h)
-        return s
+    def forward(self, x: torch.Tensor, mask: torch.Tensor = None):
+        """Return style codes; if mask provided, split into foreground/background."""
+        h = self.features(x)
+        if mask is None:
+            h_pool = self.gap(h).flatten(1)
+            return self.fc(h_pool)
+
+        mask = F.interpolate(mask, size=h.shape[2:], mode='bilinear', align_corners=False)
+        fg_feat = (h * mask).sum(dim=[2, 3]) / (mask.sum(dim=[2, 3]) + 1e-8)
+        bg_mask = 1 - mask
+        bg_feat = (h * bg_mask).sum(dim=[2, 3]) / (bg_mask.sum(dim=[2, 3]) + 1e-8)
+        s_fg = self.fc(fg_feat)
+        s_bg = self.fc(bg_feat)
+        return s_fg, s_bg
 
 
 class AdaLIN(nn.Module):
@@ -173,7 +185,7 @@ class ResnetGenerator(nn.Module):
         if self.use_spade_adalin:
             self.style_proj = nn.Conv2d(self.style_nc, 256, 1, 1, 0)
 
-    def forward(self, input, z=None, s=None):
+    def forward(self, input, z=None, s_fg=None, s_bg=None):
         x = self.DownBlock(input)
 
         gap = torch.nn.functional.adaptive_avg_pool2d(x, 1)
@@ -192,12 +204,15 @@ class ResnetGenerator(nn.Module):
 
         heatmap = torch.sum(x, dim=1, keepdim=True)
 
-        if self.use_spade_adalin and s is not None:
-            s_map = self.style_proj(s.unsqueeze(-1).unsqueeze(-1))
-            s_map = s_map.expand(-1, -1, x.size(2), x.size(3))
-            bg = 1 - norm_01(heatmap)
-            bg = F.interpolate(bg, size=x.size()[2:], mode='bilinear', align_corners=False)
-            cond = torch.cat([s_map, bg], dim=1)
+        if self.use_spade_adalin and s_fg is not None and s_bg is not None:
+            s_fg_map = self.style_proj(s_fg.unsqueeze(-1).unsqueeze(-1))
+            s_fg_map = s_fg_map.expand(-1, -1, x.size(2), x.size(3))
+            s_bg_map = self.style_proj(s_bg.unsqueeze(-1).unsqueeze(-1))
+            s_bg_map = s_bg_map.expand(-1, -1, x.size(2), x.size(3))
+            m = norm_01(heatmap)
+            m = F.interpolate(m, size=x.size()[2:], mode='bilinear', align_corners=False)
+            s_mix = m * s_fg_map + (1 - m) * s_bg_map
+            cond = torch.cat([s_mix, m], dim=1)
         else:
             cond = None
 

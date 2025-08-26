@@ -248,12 +248,18 @@ class UGATIT(object) :
 
             real_A, real_B = real_A.to(self.device), real_B.to(self.device)
             b_ref = b_ref.to(self.device)
-            s_ref = self.style_enc_B(b_ref) if self.use_spade_adalin else None
+            if self.use_spade_adalin:
+                _, _, b_ref_heatmap = self._call(self.genB2A, b_ref)
+                m_ref = norm_01(b_ref_heatmap.detach())
+                s_ref_fg, s_ref_bg = self.style_enc_B(b_ref, m_ref)
+            else:
+                s_ref_fg = s_ref_bg = None
 
             # Update D
             self.D_optim.zero_grad()
-            s_ref_detach = s_ref.detach() if s_ref is not None else None
-            fake_A2B, _, _ = self._call(self.genA2B, real_A, None, s_ref_detach)
+            s_ref_fg_detach = s_ref_fg.detach() if s_ref_fg is not None else None
+            s_ref_bg_detach = s_ref_bg.detach() if s_ref_bg is not None else None
+            fake_A2B, _, _ = self._call(self.genA2B, real_A, None, s_ref_fg_detach, s_ref_bg_detach)
             fake_B2A, _, _ = self._call(self.genB2A, real_B)
 
             real_GA_logit, real_GA_cam_logit, _ = self._call(self.disGA, real_A)
@@ -292,16 +298,27 @@ class UGATIT(object) :
             # Update G
             self.G_optim.zero_grad()
             if self.use_spade_adalin:
-                s_ref = self.style_enc_B(b_ref)
-            fake_A2B, fake_A2B_cam_logit, fake_A2B_heatmap = self._call(self.genA2B, real_A, None, s_ref)
+                _, _, b_ref_heatmap = self._call(self.genB2A, b_ref)
+                m_ref = norm_01(b_ref_heatmap.detach())
+                s_ref_fg, s_ref_bg = self.style_enc_B(b_ref, m_ref)
+                fake_A2B, fake_A2B_cam_logit, fake_A2B_heatmap = self._call(self.genA2B, real_A, None, s_ref_fg, s_ref_bg)
+            else:
+                fake_A2B, fake_A2B_cam_logit, fake_A2B_heatmap = self._call(self.genA2B, real_A)
             fake_B2A, fake_B2A_cam_logit, fake_B2A_heatmap = self._call(self.genB2A, real_B)
 
             fake_A2B2A, _, _ = self._call(self.genB2A, fake_A2B)
-            fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A, None, s_ref)
+            if self.use_spade_adalin:
+                fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A, None, s_ref_fg, s_ref_bg)
+            else:
+                fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A)
 
             fake_A2A, fake_A2A_cam_logit, _ = self._call(self.genB2A, real_A)
-            s_real_B = self.style_enc_B(real_B) if self.use_spade_adalin else None
-            fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B, None, s_real_B)
+            if self.use_spade_adalin:
+                m_real_B = norm_01(fake_B2A_heatmap.detach())
+                s_real_B_fg, s_real_B_bg = self.style_enc_B(real_B, m_real_B)
+                fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B, None, s_real_B_fg, s_real_B_bg)
+            else:
+                fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B)
 
             fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
             fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
@@ -319,11 +336,11 @@ class UGATIT(object) :
 
             if self.use_spade_adalin:
                 m_fg_A = norm_01(fake_A2B_heatmap.detach())
-                m_fg_A = F.interpolate(m_fg_A, size=real_A.size()[2:], mode='bilinear', align_corners=False)
-                w_fg_A, w_bg_A = m_fg_A, 1 - m_fg_A
+                m_fg_A_up = F.interpolate(m_fg_A, size=real_A.size()[2:], mode='bilinear', align_corners=False)
+                w_fg_A, w_bg_A = m_fg_A_up, 1 - m_fg_A_up
                 m_fg_B = norm_01(fake_B2A_heatmap.detach())
-                m_fg_B = F.interpolate(m_fg_B, size=real_B.size()[2:], mode='bilinear', align_corners=False)
-                w_fg_B, w_bg_B = m_fg_B, 1 - m_fg_B
+                m_fg_B_up = F.interpolate(m_fg_B, size=real_B.size()[2:], mode='bilinear', align_corners=False)
+                w_fg_B, w_bg_B = m_fg_B_up, 1 - m_fg_B_up
 
                 recon_A_fg = torch.mean(torch.abs(w_fg_A * (fake_A2B2A - real_A)))
                 recon_A_bg = torch.mean(torch.abs(w_bg_A * (fake_A2B2A - real_A))) * self.fg_bg_ratio
@@ -339,8 +356,9 @@ class UGATIT(object) :
                 id_B_bg = torch.mean(torch.abs(w_bg_B * (fake_B2B - real_B))) * self.fg_bg_ratio
                 G_identity_loss_B = id_B_fg + id_B_bg
 
-                s_fake = self.style_enc_B(fake_A2B)
-                L_style = torch.mean(torch.abs(s_fake - s_ref))
+                s_fake_fg, s_fake_bg = self.style_enc_B(fake_A2B, m_fg_A)
+                L_style = torch.mean(torch.abs(s_fake_fg - s_ref_fg)) + \
+                          torch.mean(torch.abs(s_fake_bg - s_ref_bg))
                 L_lp = torch.mean(torch.abs(F.avg_pool2d(fake_A2B, 7, 1, 3) - F.avg_pool2d(b_ref, 7, 1, 3)))
             else:
                 G_recon_loss_A = self.L1_loss(fake_A2B2A, real_A)
@@ -416,13 +434,14 @@ class UGATIT(object) :
                         real_A, real_B = real_A.to(self.device), real_B.to(self.device)
 
                         if self.use_spade_adalin:
-                            s_ref = self.style_enc_B(real_B)
-                            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, None, s_ref)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
+                            m_ref = norm_01(fake_B2A_heatmap.detach())
+                            s_ref_fg, s_ref_bg = self.style_enc_B(real_B, m_ref)
+                            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, None, s_ref_fg, s_ref_bg)
                             fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, None, s_ref)
+                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, None, s_ref_fg, s_ref_bg)
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
-                            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, None, s_ref)
+                            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, None, s_ref_fg, s_ref_bg)
                         else:
                             fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
@@ -462,13 +481,14 @@ class UGATIT(object) :
                         real_A, real_B = real_A.to(self.device), real_B.to(self.device)
 
                         if self.use_spade_adalin:
-                            s_ref = self.style_enc_B(real_B)
-                            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, None, s_ref)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
+                            m_ref = norm_01(fake_B2A_heatmap.detach())
+                            s_ref_fg, s_ref_bg = self.style_enc_B(real_B, m_ref)
+                            fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, None, s_ref_fg, s_ref_bg)
                             fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, None, s_ref)
+                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, None, s_ref_fg, s_ref_bg)
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
-                            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, None, s_ref)
+                            fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, None, s_ref_fg, s_ref_bg)
                         else:
                             fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
@@ -573,7 +593,7 @@ class UGATIT(object) :
 
                 if self.use_spade_adalin:
                     s_zero = torch.zeros(real_A.size(0), self.style_nc, device=self.device)
-                    fake_A2B, _, _ = self._call(self.genA2B, real_A, None, s_zero)
+                    fake_A2B, _, _ = self._call(self.genA2B, real_A, None, s_zero, s_zero)
                 else:
                     fake_A2B, _, _ = self._call(self.genA2B, real_A)
 

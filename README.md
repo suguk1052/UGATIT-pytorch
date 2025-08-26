@@ -122,7 +122,8 @@ below.
 * Gradient checkpointing via `--use_checkpoint`
 * Optional center cropping via `--center_crop` to keep aspect ratio without padding
 * SPADE-AdaLIN style conditioning (`--use_spade_adalin`, `--style_nc`, `--lambda_style`,
-  `--lambda_lowpass`, `--fg_bg_cycle_ratio`) using a random domain B reference each step
+  `--lambda_lowpass`, `--fg_bg_cycle_ratio`) that splits a random domain B reference into
+  CAM-based foreground/background style codes
 
 ## 🛠️ Local Setup (for forked repo by @suguk1052)
 
