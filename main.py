@@ -36,7 +36,6 @@ def parse_args():
     parser.add_argument('--style_nc', type=int, default=256, help='style code dimension')
     parser.add_argument('--lambda_style', type=float, default=1.0, help='style consistency loss weight')
     parser.add_argument('--lambda_lowpass', type=float, default=5.0, help='low-pass tone loss weight')
-    parser.add_argument('--lambda_highpass', type=float, default=1.0, help='high-pass texture loss weight')
     parser.add_argument('--fg_bg_cycle_ratio', type=float, default=0.2,
                         help='background weight ratio for cycle/identity losses')
 

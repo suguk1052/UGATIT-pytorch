@@ -68,8 +68,7 @@ below.
 * If the memory of gpu is **not sufficient**, set `--light` to True
 * Enable style diversity with `--use_ds` (see `--style_dim` and `--ds_weight`)
 * Inject reference-domain style and CAM-weighted losses with `--use_spade_adalin`
-  (tune `--style_nc`, `--lambda_style`, `--lambda_lowpass`, `--lambda_highpass`,
-  `--fg_bg_cycle_ratio`)
+  (tune `--style_nc`, `--lambda_style`, `--lambda_lowpass`, `--fg_bg_cycle_ratio`)
 * Save memory with `--use_checkpoint` for gradient checkpointing
 * To train with a rectangular resolution, set `--aspect_ratio <width/height>`.
   The resulting width `img_size * aspect_ratio` must be divisible by 4.
@@ -123,9 +122,9 @@ below.
 * Gradient checkpointing via `--use_checkpoint`
 * Optional center cropping via `--center_crop` to keep aspect ratio without padding
 * SPADE-AdaLIN style conditioning (`--use_spade_adalin`, `--style_nc`, `--lambda_style`,
-  `--lambda_lowpass`, `--lambda_highpass`, `--fg_bg_cycle_ratio`) that splits a random
+  `--lambda_lowpass`, `--fg_bg_cycle_ratio`) that splits a random
   domain B reference into CAM-based foreground/background style codes, copies the source
-  background during A→B→A cycles, penalizes background high-frequency mismatch, weights
+  background during A→B→A cycles, enforces background low-frequency tone consistency, weights
   cycle/identity losses with the source-domain masks, and limits skip connections to the
   foreground to curb background bleeding
 

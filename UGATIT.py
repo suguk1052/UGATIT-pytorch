@@ -55,7 +55,6 @@ class UGATIT(object) :
         self.style_nc = args.style_nc
         self.lambda_style = args.lambda_style
         self.lambda_lowpass = args.lambda_lowpass
-        self.lambda_highpass = args.lambda_highpass
         self.fg_bg_ratio = args.fg_bg_cycle_ratio
 
         """ Generator """
@@ -117,7 +116,6 @@ class UGATIT(object) :
         print("# style_nc : ", self.style_nc)
         print("# lambda_style : ", self.lambda_style)
         print("# lambda_lowpass : ", self.lambda_lowpass)
-        print("# lambda_highpass : ", self.lambda_highpass)
         print("# fg_bg_cycle_ratio : ", self.fg_bg_ratio)
 
 
@@ -361,9 +359,10 @@ class UGATIT(object) :
                 s_fake_fg, s_fake_bg = self.style_enc_B(fake_A2B, m_fg_A_ref)
                 L_style = torch.mean(torch.abs(s_fake_fg - s_ref_fg)) + \
                           torch.mean(torch.abs(s_fake_bg - s_ref_bg))
-                L_lp = torch.mean(torch.abs(F.avg_pool2d(fake_A2B, 7, 1, 3) - F.avg_pool2d(b_ref, 7, 1, 3)))
                 m_bg_A = 1 - F.interpolate(m_fg_A_ref, size=real_A.size()[2:], mode='bilinear', align_corners=False)
-                L_hp = torch.mean(torch.abs((high_pass(fake_A2B) - high_pass(b_ref)) * m_bg_A))
+                blur_fake = F.avg_pool2d(fake_A2B, 7, 1, 3)
+                blur_ref = F.avg_pool2d(b_ref, 7, 1, 3)
+                L_lp = torch.mean(torch.abs((blur_fake - blur_ref) * m_bg_A))
             else:
                 G_recon_loss_A = self.L1_loss(fake_A2B2A, real_A)
                 G_recon_loss_B = self.L1_loss(fake_B2A2B, real_B)
@@ -371,7 +370,6 @@ class UGATIT(object) :
                 G_identity_loss_B = self.L1_loss(fake_B2B, real_B)
                 L_style = torch.tensor(0.0, device=self.device)
                 L_lp = torch.tensor(0.0, device=self.device)
-                L_hp = torch.tensor(0.0, device=self.device)
 
             G_cam_loss_A = self.BCE_loss(fake_B2A_cam_logit, torch.ones_like(fake_B2A_cam_logit).to(self.device)) + self.BCE_loss(fake_A2A_cam_logit, torch.zeros_like(fake_A2A_cam_logit).to(self.device))
             G_cam_loss_B = self.BCE_loss(fake_A2B_cam_logit, torch.ones_like(fake_A2B_cam_logit).to(self.device)) + self.BCE_loss(fake_B2B_cam_logit, torch.zeros_like(fake_B2B_cam_logit).to(self.device))
@@ -404,7 +402,7 @@ class UGATIT(object) :
                 + self.cam_weight * G_cam_loss_B
 
             Generator_loss = G_loss_A + G_loss_B + self.ds_weight * DS_loss \
-                + self.lambda_style * L_style + self.lambda_lowpass * L_lp + self.lambda_highpass * L_hp
+                + self.lambda_style * L_style + self.lambda_lowpass * L_lp
             if torch.isnan(Generator_loss):
                 print('Warning: generator loss is NaN; skipping update')
             else:
