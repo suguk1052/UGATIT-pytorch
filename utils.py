@@ -5,6 +5,7 @@ import torch
 import numpy as np
 from PIL import Image, ImageOps
 from torchvision.transforms import functional as TF
+import torch.nn.functional as F
 
 def load_test_data(image_path, size=256):
     img = misc.imread(image_path, mode='RGB')
@@ -103,3 +104,12 @@ def norm_01(x: torch.Tensor) -> torch.Tensor:
     min_val = flat.min(dim=1)[0].view(b, 1, 1, 1)
     max_val = flat.max(dim=1)[0].view(b, 1, 1, 1)
     return (x - min_val) / (max_val - min_val + 1e-8)
+
+
+def high_pass(x: torch.Tensor) -> torch.Tensor:
+    """Simple Laplacian high-pass filter."""
+    kernel = torch.tensor([[0, -1, 0],
+                           [-1, 4, -1],
+                           [0, -1, 0]], dtype=x.dtype, device=x.device)
+    kernel = kernel.view(1, 1, 3, 3).repeat(x.size(1), 1, 1, 1)
+    return F.conv2d(x, kernel, padding=1, groups=x.size(1))

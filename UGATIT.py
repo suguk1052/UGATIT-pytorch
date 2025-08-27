@@ -55,6 +55,7 @@ class UGATIT(object) :
         self.style_nc = args.style_nc
         self.lambda_style = args.lambda_style
         self.lambda_lowpass = args.lambda_lowpass
+        self.lambda_highpass = args.lambda_highpass
         self.fg_bg_ratio = args.fg_bg_cycle_ratio
 
         """ Generator """
@@ -116,6 +117,7 @@ class UGATIT(object) :
         print("# style_nc : ", self.style_nc)
         print("# lambda_style : ", self.lambda_style)
         print("# lambda_lowpass : ", self.lambda_lowpass)
+        print("# lambda_highpass : ", self.lambda_highpass)
         print("# fg_bg_cycle_ratio : ", self.fg_bg_ratio)
 
 
@@ -342,18 +344,16 @@ class UGATIT(object) :
 
                 m_fg_A_src = norm_01(real_A_heatmap.detach())
                 m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A.size()[2:], mode='bilinear', align_corners=False)
-                w_fg_A, w_bg_A = m_fg_A_up, 1 - m_fg_A_up
 
-                recon_A_fg = torch.mean(torch.abs(w_fg_A * (fake_A2B2A - real_A)))
-                recon_A_bg = torch.mean(torch.abs(w_bg_A * (fake_A2B2A - real_A))) * self.fg_bg_ratio
-                G_recon_loss_A = recon_A_fg + recon_A_bg
+                fake_A2B2A = m_fg_A_up * fake_A2B2A + (1 - m_fg_A_up) * real_A
+                fake_A2A = m_fg_A_up * fake_A2A + (1 - m_fg_A_up) * real_A
+
+                G_recon_loss_A = torch.mean(torch.abs(m_fg_A_up * (fake_A2B2A - real_A)))
                 recon_B_fg = torch.mean(torch.abs(w_fg_B * (fake_B2A2B - real_B)))
                 recon_B_bg = torch.mean(torch.abs(w_bg_B * (fake_B2A2B - real_B))) * self.fg_bg_ratio
                 G_recon_loss_B = recon_B_fg + recon_B_bg
 
-                id_A_fg = torch.mean(torch.abs(w_fg_A * (fake_A2A - real_A)))
-                id_A_bg = torch.mean(torch.abs(w_bg_A * (fake_A2A - real_A))) * self.fg_bg_ratio
-                G_identity_loss_A = id_A_fg + id_A_bg
+                G_identity_loss_A = torch.mean(torch.abs(m_fg_A_up * (fake_A2A - real_A)))
                 id_B_fg = torch.mean(torch.abs(w_fg_B * (fake_B2B - real_B)))
                 id_B_bg = torch.mean(torch.abs(w_bg_B * (fake_B2B - real_B))) * self.fg_bg_ratio
                 G_identity_loss_B = id_B_fg + id_B_bg
@@ -362,6 +362,8 @@ class UGATIT(object) :
                 L_style = torch.mean(torch.abs(s_fake_fg - s_ref_fg)) + \
                           torch.mean(torch.abs(s_fake_bg - s_ref_bg))
                 L_lp = torch.mean(torch.abs(F.avg_pool2d(fake_A2B, 7, 1, 3) - F.avg_pool2d(b_ref, 7, 1, 3)))
+                m_bg_A = 1 - F.interpolate(m_fg_A_ref, size=real_A.size()[2:], mode='bilinear', align_corners=False)
+                L_hp = torch.mean(torch.abs((high_pass(fake_A2B) - high_pass(b_ref)) * m_bg_A))
             else:
                 G_recon_loss_A = self.L1_loss(fake_A2B2A, real_A)
                 G_recon_loss_B = self.L1_loss(fake_B2A2B, real_B)
@@ -369,6 +371,7 @@ class UGATIT(object) :
                 G_identity_loss_B = self.L1_loss(fake_B2B, real_B)
                 L_style = torch.tensor(0.0, device=self.device)
                 L_lp = torch.tensor(0.0, device=self.device)
+                L_hp = torch.tensor(0.0, device=self.device)
 
             G_cam_loss_A = self.BCE_loss(fake_B2A_cam_logit, torch.ones_like(fake_B2A_cam_logit).to(self.device)) + self.BCE_loss(fake_A2A_cam_logit, torch.zeros_like(fake_A2A_cam_logit).to(self.device))
             G_cam_loss_B = self.BCE_loss(fake_A2B_cam_logit, torch.ones_like(fake_A2B_cam_logit).to(self.device)) + self.BCE_loss(fake_B2B_cam_logit, torch.zeros_like(fake_B2B_cam_logit).to(self.device))
@@ -401,7 +404,7 @@ class UGATIT(object) :
                 + self.cam_weight * G_cam_loss_B
 
             Generator_loss = G_loss_A + G_loss_B + self.ds_weight * DS_loss \
-                + self.lambda_style * L_style + self.lambda_lowpass * L_lp
+                + self.lambda_style * L_style + self.lambda_lowpass * L_lp + self.lambda_highpass * L_hp
             if torch.isnan(Generator_loss):
                 print('Warning: generator loss is NaN; skipping update')
             else:
@@ -452,6 +455,11 @@ class UGATIT(object) :
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
                             fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
 
+                        m_fg_A_src = norm_01(fake_A2A_heatmap.detach())
+                        m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A.size()[2:], mode='bilinear', align_corners=False)
+                        fake_A2B2A = m_fg_A_up * fake_A2B2A + (1 - m_fg_A_up) * real_A
+                        fake_A2A = m_fg_A_up * fake_A2A + (1 - m_fg_A_up) * real_A
+
                         A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A[0]))),
                                                                    cam(tensor2numpy(fake_A2A_heatmap[0]), (self.img_size, self.img_w)),
                                                                    RGB2BGR(tensor2numpy(denorm(fake_A2A[0]))),
@@ -498,6 +506,11 @@ class UGATIT(object) :
                             fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A)
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
                             fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
+
+                        m_fg_A_src = norm_01(fake_A2A_heatmap.detach())
+                        m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A.size()[2:], mode='bilinear', align_corners=False)
+                        fake_A2B2A = m_fg_A_up * fake_A2B2A + (1 - m_fg_A_up) * real_A
+                        fake_A2A = m_fg_A_up * fake_A2A + (1 - m_fg_A_up) * real_A
 
                         A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A[0]))),
                                                                    cam(tensor2numpy(fake_A2A_heatmap[0]), (self.img_size, self.img_w)),
