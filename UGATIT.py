@@ -312,7 +312,7 @@ class UGATIT(object) :
             else:
                 fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A)
 
-            fake_A2A, fake_A2A_cam_logit, _ = self._call(self.genB2A, real_A)
+            fake_A2A, fake_A2A_cam_logit, real_A_heatmap = self._call(self.genB2A, real_A)
             if self.use_spade_adalin:
                 m_real_B = norm_01(fake_B2A_heatmap.detach())
                 s_real_B_fg, s_real_B_bg = self.style_enc_B(real_B, m_real_B)
@@ -335,12 +335,14 @@ class UGATIT(object) :
             G_ad_cam_loss_LB = self.MSE_loss(fake_LB_cam_logit, torch.ones_like(fake_LB_cam_logit).to(self.device))
 
             if self.use_spade_adalin:
-                m_fg_A = norm_01(fake_A2B_heatmap.detach())
-                m_fg_A_up = F.interpolate(m_fg_A, size=real_A.size()[2:], mode='bilinear', align_corners=False)
-                w_fg_A, w_bg_A = m_fg_A_up, 1 - m_fg_A_up
+                m_fg_A_ref = norm_01(fake_A2B_heatmap.detach())
                 m_fg_B = norm_01(fake_B2A_heatmap.detach())
                 m_fg_B_up = F.interpolate(m_fg_B, size=real_B.size()[2:], mode='bilinear', align_corners=False)
                 w_fg_B, w_bg_B = m_fg_B_up, 1 - m_fg_B_up
+
+                m_fg_A_src = norm_01(real_A_heatmap.detach())
+                m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A.size()[2:], mode='bilinear', align_corners=False)
+                w_fg_A, w_bg_A = m_fg_A_up, 1 - m_fg_A_up
 
                 recon_A_fg = torch.mean(torch.abs(w_fg_A * (fake_A2B2A - real_A)))
                 recon_A_bg = torch.mean(torch.abs(w_bg_A * (fake_A2B2A - real_A))) * self.fg_bg_ratio
@@ -356,7 +358,7 @@ class UGATIT(object) :
                 id_B_bg = torch.mean(torch.abs(w_bg_B * (fake_B2B - real_B))) * self.fg_bg_ratio
                 G_identity_loss_B = id_B_fg + id_B_bg
 
-                s_fake_fg, s_fake_bg = self.style_enc_B(fake_A2B, m_fg_A)
+                s_fake_fg, s_fake_bg = self.style_enc_B(fake_A2B, m_fg_A_ref)
                 L_style = torch.mean(torch.abs(s_fake_fg - s_ref_fg)) + \
                           torch.mean(torch.abs(s_fake_bg - s_ref_bg))
                 L_lp = torch.mean(torch.abs(F.avg_pool2d(fake_A2B, 7, 1, 3) - F.avg_pool2d(b_ref, 7, 1, 3)))

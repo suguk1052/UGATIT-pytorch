@@ -88,7 +88,8 @@ class ResnetSPADEAdaLINBlock(nn.Module):
         out = self.pad2(out)
         out = self.conv2(out)
         out = self.norm2(out, cond)
-        return out + x
+        mask = cond[:, -1:, :, :]
+        return out + x * mask
 
 
 class ResnetGenerator(nn.Module):

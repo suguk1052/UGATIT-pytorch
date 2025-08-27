@@ -123,7 +123,9 @@ below.
 * Optional center cropping via `--center_crop` to keep aspect ratio without padding
 * SPADE-AdaLIN style conditioning (`--use_spade_adalin`, `--style_nc`, `--lambda_style`,
   `--lambda_lowpass`, `--fg_bg_cycle_ratio`) that splits a random domain B reference into
-  CAM-based foreground/background style codes
+  CAM-based foreground/background style codes, weights cycle/identity losses with the
+  source-domain masks, and limits skip connections to the foreground to curb background
+  bleeding
 
 ## 🛠️ Local Setup (for forked repo by @suguk1052)
 
