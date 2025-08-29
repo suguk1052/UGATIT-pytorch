@@ -144,6 +144,8 @@ def main():
                         help='Optional directory of real images to use as ground truth')
     parser.add_argument('--result_dir', default='results',
                         help='Directory containing generated results')
+    parser.add_argument('--fake_dir', default=None,
+                        help='Optional directory of generated images; overrides result_dir/dataset/test')
     parser.add_argument('--num_samples', type=int, default=None,
                         help='Number of images to evaluate; defaults to using '
                              'all available images')
@@ -162,7 +164,11 @@ def main():
         )
     else:
         real_dir = args.real_dir
-    fake_dir = os.path.join(args.result_dir, args.dataset, 'test', args.direction)
+
+    if args.fake_dir is None:
+        fake_dir = os.path.join(args.result_dir, args.dataset, 'test', args.direction)
+    else:
+        fake_dir = args.fake_dir
 
     real_paths = list_image_files(real_dir)
     fake_paths = list_image_files(fake_dir)

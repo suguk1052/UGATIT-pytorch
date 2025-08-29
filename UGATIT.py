@@ -1,4 +1,5 @@
 import time, itertools
+import os
 from dataset import ImageFolder
 from torchvision import transforms
 from torch.utils.data import DataLoader
@@ -27,6 +28,8 @@ class UGATIT(object) :
 
         self.result_dir = args.result_dir
         self.dataset = args.dataset
+        self.testA_dir = args.testA_dir
+        self.testB_dir = args.testB_dir
 
         self.iteration = args.iteration
         self.decay_flag = args.decay_flag
@@ -156,8 +159,17 @@ class UGATIT(object) :
 
         self.trainA = ImageFolder(os.path.join('dataset', self.dataset, 'trainA'), train_transform)
         self.trainB = ImageFolder(os.path.join('dataset', self.dataset, 'trainB'), train_transform)
-        self.testA = ImageFolder(os.path.join('dataset', self.dataset, 'testA'), test_transform)
-        self.testB = ImageFolder(os.path.join('dataset', self.dataset, 'testB'), test_transform)
+
+        testA_root = self.testA_dir if self.testA_dir is not None else os.path.join('dataset', self.dataset, 'testA')
+        testB_root = self.testB_dir if self.testB_dir is not None else os.path.join('dataset', self.dataset, 'testB')
+
+        if not os.path.isdir(testA_root):
+            raise FileNotFoundError(f'Test A directory not found: {testA_root}')
+        if not os.path.isdir(testB_root):
+            raise FileNotFoundError(f'Test B directory not found: {testB_root}')
+
+        self.testA = ImageFolder(testA_root, test_transform)
+        self.testB = ImageFolder(testB_root, test_transform)
         self.trainA_loader = DataLoader(self.trainA, batch_size=self.batch_size, shuffle=True)
         self.trainB_loader = DataLoader(self.trainB, batch_size=self.batch_size, shuffle=True)
         self.testA_loader = DataLoader(self.testA, batch_size=1, shuffle=False)

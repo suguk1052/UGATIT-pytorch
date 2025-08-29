@@ -84,6 +84,8 @@ below.
 * Use `--resume_iter N` to load a specific checkpoint during testing.
 * Generated images are stored under `results/YOUR_DATASET_NAME/test/A2B/` and
   `test/B2A/` using the original filenames from `testA` and `testB`.
+* Supply `--testA_dir PATH` (or `--testB_dir PATH`) to use external folders for
+  the A or B domain test images without copying them into the repository.
 
 ## Architecture
 <div align="center">
@@ -161,4 +163,6 @@ or `test/B2A/`. Each JSON also records how many real and fake images were
 used. The KID file contains both the raw `kid` value and `kid_x100` for
 convenience.
 You can also specify `--real_dir PATH` to override the directory of real
-images used as ground truth (by default it is `testB` or `testA`).
+images used as ground truth (by default it is `testB` or `testA`). Use
+`--fake_dir PATH` to evaluate results stored outside the default
+`results/DATASET/test/` hierarchy.
