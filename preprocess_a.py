@@ -75,17 +75,33 @@ def process_image(img_path, output_path, crop_mode=None):
         padded, M, (pw, ph), borderMode=cv2.BORDER_CONSTANT, borderValue=gray
     )
 
+    extra_left = 50 if tx > 0 else 0
+    extra_right = 50 if tx < 0 else 0
+    extra_top = 50 if ty < 0 else 0
+    extra_bottom = 50 if ty > 0 else 0
+    if extra_left or extra_right or extra_top or extra_bottom:
+        transformed = cv2.copyMakeBorder(
+            transformed,
+            extra_top,
+            extra_bottom,
+            extra_left,
+            extra_right,
+            cv2.BORDER_CONSTANT,
+            value=gray,
+        )
+
+    th, tw = transformed.shape[:2]
     if crop_mode is None:
         cv2.imwrite(output_path, transformed)
         return
 
     # scale to cover 512x512 and crop so a reference band sits at the canvas center
     target = 512
-    scale = target / min(pw, ph)
+    scale = target / min(tw, th)
     if crop_mode == "bottom":
         scale *= 1.1
-    new_w = int(np.ceil(pw * scale))
-    new_h = int(np.ceil(ph * scale))
+    new_w = int(np.ceil(tw * scale))
+    new_h = int(np.ceil(th * scale))
     resized = cv2.resize(transformed, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
     base_y = (new_h - target) // 2
     bias = int((0.5 - center_ratio) * h * scale)

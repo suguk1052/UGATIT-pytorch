@@ -41,25 +41,26 @@ The results of the paper came from the **Tensorflow code**
 
 If you need to crop and augment domain A images before training, place the
 original files under `preprocess_source/trainA` and `preprocess_source/testA`
-and run:
+and run the script once for each folder, for example:
 
 ```
-python preprocess_a.py --dataset_name YOUR_DATASET_NAME [--bottom]
+python preprocess_a.py --input_dir preprocess_source/trainA \
+                       --output_dir dataset/YOUR_DATASET_NAME/trainA
 ```
 
-Run this once before starting `main.py` to prepare domain A images.
+Add `--top` to keep the upper 40 % with a 35–45 % fade band or `--bottom` to
+retain the lower 30 % with a 65–75 % fade band. Without either flag the images
+are left uncropped.
 
-By default the script keeps only the top 40 % of each image, fading to neutral
-gray across the 35–45 % band using a Gaussian kernel. With the `--bottom` flag,
-it instead retains the bottom 30 %, fading the 65–75 % band. The resulting
-canvas undergoes random translations up to ±10 pixels and random rotations up to
-±10°, with any exposed regions filled with the same gray. The output is scaled
-to cover a 512×512 frame while keeping aspect ratio and cropped so the row at
-20 % (or 93 % when using `--bottom`) of the original height falls at the canvas
-center. Each processed file keeps the original base name and is written to
-`dataset/YOUR_DATASET_NAME/trainA` and `dataset/YOUR_DATASET_NAME/testA`. After
-running this preprocessing step you can proceed with the usual training command
-below.
+In all modes the canvas experiences random translations up to ±10 pixels and
+random rotations up to ±10°, with exposed regions filled in gray. After the
+translation step, an additional 50 px gray margin is appended to the side
+opposite the shift on both axes. When `--top` or `--bottom` is supplied, the
+resulting image is further scaled to cover a 512×512 frame and cropped so a
+reference band (20 % from the top when using `--top`, 93 % when using `--bottom`)
+lands at the canvas center. Each processed file keeps the original base name and
+is written to the specified output directory. After running this preprocessing
+step you can proceed with the usual training command below.
 
 ### Train
 ```
