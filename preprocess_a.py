@@ -1,19 +1,23 @@
 import os
 import argparse
 import random
-import cv2
-import numpy as np
 
-def process_image(img_path, output_path, keep_bottom=False):
+def process_image(img_path, output_path, crop_mode=None):
+    import cv2
+    import numpy as np
+
     img = cv2.imread(img_path, cv2.IMREAD_COLOR)
     if img is None:
         print(f"Unable to read {img_path}")
         return
 
     h, w = img.shape[:2]
-    gray_val = 127
+    extra_w = int(round(w * 0.15))
+    extra_h = int(round(h * 0.15))
+    gray_val = 128
+    gray = (gray_val, gray_val, gray_val)
 
-    if keep_bottom:
+    if crop_mode == "bottom":
         # keep the bottom 30% and fade between 65% and 75%
         mask = np.zeros((h, w), dtype=np.float32)
         mask[int(h * 0.7) :, :] = 1.0
@@ -22,7 +26,7 @@ def process_image(img_path, output_path, keep_bottom=False):
         mask[: int(h * 0.65), :] = 0.0
         mask[int(h * 0.75) :, :] = 1.0
         center_ratio = 0.93
-    else:
+    elif crop_mode == "top":
         # keep the top 40% and fade between 35% and 45%
         mask = np.zeros((h, w), dtype=np.float32)
         mask[: int(h * 0.4), :] = 1.0
@@ -31,9 +35,15 @@ def process_image(img_path, output_path, keep_bottom=False):
         mask[: int(h * 0.35), :] = 1.0
         mask[int(h * 0.45) :, :] = 0.0
         center_ratio = 0.2
-    gray_img = np.full_like(img, gray_val, dtype=np.uint8)
-    blended = img.astype(np.float32) * mask[:, :, None] + gray_img.astype(np.float32) * (1 - mask[:, :, None])
-    blended = blended.astype(np.uint8)
+    else:
+        mask = None
+
+    if mask is not None:
+        gray_img = np.full_like(img, gray_val, dtype=np.uint8)
+        blended = img.astype(np.float32) * mask[:, :, None] + gray_img.astype(np.float32) * (1 - mask[:, :, None])
+        blended = blended.astype(np.uint8)
+    else:
+        blended = img
 
     # compute padding so rotation/translation don't crop the image
     max_trans = 10
@@ -43,9 +53,8 @@ def process_image(img_path, output_path, keep_bottom=False):
     h_rot = h * abs(np.cos(rad)) + w * abs(np.sin(rad))
     pad_w = int(np.ceil((w_rot - w) / 2 + max_trans))
     pad_h = int(np.ceil((h_rot - h) / 2 + max_trans))
-    gray = (gray_val, gray_val, gray_val)
 
-    if keep_bottom:
+    if crop_mode == "bottom":
         top_pad = int(pad_h * 0.5)
         bottom_pad = int(pad_h * 1.5)
         side_pad = int(pad_w * 0.8)
@@ -68,13 +77,33 @@ def process_image(img_path, output_path, keep_bottom=False):
         padded, M, (pw, ph), borderMode=cv2.BORDER_CONSTANT, borderValue=gray
     )
 
+    extra_left = extra_w if tx > 0 else 0
+    extra_right = extra_w if tx < 0 else 0
+    extra_top = extra_h if ty < 0 else 0
+    extra_bottom = extra_h if ty > 0 else 0
+    if extra_left or extra_right or extra_top or extra_bottom:
+        transformed = cv2.copyMakeBorder(
+            transformed,
+            extra_top,
+            extra_bottom,
+            extra_left,
+            extra_right,
+            cv2.BORDER_CONSTANT,
+            value=gray,
+        )
+
+    th, tw = transformed.shape[:2]
+    if crop_mode is None:
+        cv2.imwrite(output_path, transformed)
+        return
+
     # scale to cover 512x512 and crop so a reference band sits at the canvas center
     target = 512
-    scale = target / min(pw, ph)
-    if keep_bottom:
+    scale = target / min(tw, th)
+    if crop_mode == "bottom":
         scale *= 1.1
-    new_w = int(np.ceil(pw * scale))
-    new_h = int(np.ceil(ph * scale))
+    new_w = int(np.ceil(tw * scale))
+    new_h = int(np.ceil(th * scale))
     resized = cv2.resize(transformed, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
     base_y = (new_h - target) // 2
     bias = int((0.5 - center_ratio) * h * scale)
@@ -83,26 +112,32 @@ def process_image(img_path, output_path, keep_bottom=False):
     crop = resized[y_off : y_off + target, x_off : x_off + target]
     cv2.imwrite(output_path, crop)
 
-def process_split(source_dir, dest_dir, keep_bottom=False):
+def process_dir(source_dir, dest_dir, crop_mode=None):
     os.makedirs(dest_dir, exist_ok=True)
     for fname in os.listdir(source_dir):
         if fname.lower().endswith((".jpg", ".jpeg", ".png", ".bmp")):
             src = os.path.join(source_dir, fname)
             base = os.path.splitext(fname)[0]
             dst = os.path.join(dest_dir, base + ".png")
-            process_image(src, dst, keep_bottom)
+            process_image(src, dst, crop_mode)
 
 def main():
-    parser = argparse.ArgumentParser(description="Preprocess domain A images.")
-    parser.add_argument("--dataset_name", required=True, help="Name of the dataset inside dataset/.")
-    parser.add_argument("--source_root", default="preprocess_source", help="Root directory containing raw images.")
-    parser.add_argument("--dataset_root", default="dataset", help="Root directory for processed dataset.")
-    parser.add_argument("--bottom", action="store_true", help="keep bottom 30% instead of top 40%")
+    parser = argparse.ArgumentParser(description="Preprocess images with optional cropping.")
+    parser.add_argument("--input_dir", required=True, help="Directory containing raw images.")
+    parser.add_argument("--output_dir", required=True, help="Directory to save processed images.")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--top", action="store_true", help="keep top 40%% and fade between 35%% and 45%%")
+    group.add_argument("--bottom", action="store_true", help="keep bottom 30%% and fade between 65%% and 75%%")
     args = parser.parse_args()
-    for split in ["trainA", "testA"]:
-        src_dir = os.path.join(args.source_root, split)
-        dst_dir = os.path.join(args.dataset_root, args.dataset_name, split)
-        process_split(src_dir, dst_dir, args.bottom)
+
+    if args.bottom:
+        mode = "bottom"
+    elif args.top:
+        mode = "top"
+    else:
+        mode = None
+
+    process_dir(args.input_dir, args.output_dir, mode)
 
 if __name__ == "__main__":
     main()
