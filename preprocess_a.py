@@ -14,7 +14,7 @@ def process_image(img_path, output_path, crop_mode=None):
     h, w = img.shape[:2]
     extra_w = int(round(w * 0.15))
     extra_h = int(round(h * 0.15))
-    gray_val = 127
+    gray_val = 128
     gray = (gray_val, gray_val, gray_val)
 
     if crop_mode == "bottom":

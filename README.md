@@ -53,8 +53,9 @@ retain the lower 30 % with a 65–75 % fade band. Without either flag the im
 are left uncropped.
 
 In all modes the canvas experiences random translations up to ±10 pixels and
-random rotations up to ±10°, with exposed regions filled in gray. After the
-translation step, a gray margin equal to 15 % of the original width or height is
+random rotations up to ±10°, with exposed regions filled in gray (RGB 128).
+After the translation step, a gray (128,128,128) margin equal to 15 % of the
+original width or height is
 appended to the side opposite the shift along each axis. When `--top` or
 `--bottom` is supplied, the resulting image is further scaled to cover a
 512×512 frame and cropped so a reference band (20 % from the top when using
