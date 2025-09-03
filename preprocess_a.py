@@ -12,6 +12,8 @@ def process_image(img_path, output_path, crop_mode=None):
         return
 
     h, w = img.shape[:2]
+    extra_w = int(round(w * 0.15))
+    extra_h = int(round(h * 0.15))
     gray_val = 127
     gray = (gray_val, gray_val, gray_val)
 
@@ -75,10 +77,10 @@ def process_image(img_path, output_path, crop_mode=None):
         padded, M, (pw, ph), borderMode=cv2.BORDER_CONSTANT, borderValue=gray
     )
 
-    extra_left = 50 if tx > 0 else 0
-    extra_right = 50 if tx < 0 else 0
-    extra_top = 50 if ty < 0 else 0
-    extra_bottom = 50 if ty > 0 else 0
+    extra_left = extra_w if tx > 0 else 0
+    extra_right = extra_w if tx < 0 else 0
+    extra_top = extra_h if ty < 0 else 0
+    extra_bottom = extra_h if ty > 0 else 0
     if extra_left or extra_right or extra_top or extra_bottom:
         transformed = cv2.copyMakeBorder(
             transformed,

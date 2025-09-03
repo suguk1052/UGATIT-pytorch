@@ -54,10 +54,11 @@ are left uncropped.
 
 In all modes the canvas experiences random translations up to ±10 pixels and
 random rotations up to ±10°, with exposed regions filled in gray. After the
-translation step, an additional 50 px gray margin is appended to the side
-opposite the shift on both axes. When `--top` or `--bottom` is supplied, the
-resulting image is further scaled to cover a 512×512 frame and cropped so a
-reference band (20 % from the top when using `--top`, 93 % when using `--bottom`)
+translation step, a gray margin equal to 15 % of the original width or height is
+appended to the side opposite the shift along each axis. When `--top` or
+`--bottom` is supplied, the resulting image is further scaled to cover a
+512×512 frame and cropped so a reference band (20 % from the top when using
+`--top`, 93 % when using `--bottom`)
 lands at the canvas center. Each processed file keeps the original base name and
 is written to the specified output directory. After running this preprocessing
 step you can proceed with the usual training command below.
