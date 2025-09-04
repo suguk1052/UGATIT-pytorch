@@ -53,6 +53,8 @@ def parse_args():
                         help='The iteration of checkpoints to load for testing')
     parser.add_argument('--use_checkpoint', type=str2bool, default=False,
                         help='enable gradient checkpointing')
+    parser.add_argument('--sigma_f', type=float, default=0.0,
+                        help='Stddev of noise added before each upsampling block')
 
     args = parser.parse_args()
     args.img_w = int(args.img_size * args.aspect_ratio)

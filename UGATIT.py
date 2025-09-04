@@ -70,6 +70,7 @@ class UGATIT(object) :
         self.resume = args.resume
         self.resume_iter = args.resume_iter
         self.use_checkpoint = args.use_checkpoint and _CHECKPOINT_AVAILABLE
+        self.sigma_f = args.sigma_f
 
         if args.use_checkpoint and not _CHECKPOINT_AVAILABLE:
             print('WARNING: torch.utils.checkpoint is not available. Gradient checkpointing is disabled.')
@@ -108,6 +109,7 @@ class UGATIT(object) :
         print("# use_ds : ", self.use_ds)
         print("# style_dim : ", self.style_dim)
         print("# ds_weight : ", self.ds_weight)
+        print("# sigma_f : ", self.sigma_f)
 
 
 
@@ -169,11 +171,11 @@ class UGATIT(object) :
         self.genA2B = ResnetGenerator(input_nc=3, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
                                       img_height=self.img_size, img_width=self.img_w,
                                       light=self.light, style_dim=self.style_dim,
-                                      use_ds=self.use_ds).to(self.device)
+                                      use_ds=self.use_ds, sigma_f=self.sigma_f).to(self.device)
         self.genB2A = ResnetGenerator(input_nc=3, output_nc=3, ngf=self.ch, n_blocks=self.n_res,
                                       img_height=self.img_size, img_width=self.img_w,
                                       light=self.light, style_dim=self.style_dim,
-                                      use_ds=self.use_ds).to(self.device)
+                                      use_ds=self.use_ds, sigma_f=self.sigma_f).to(self.device)
         self.disGA = Discriminator(input_nc=3, ndf=self.ch, n_layers=7).to(self.device)
         self.disGB = Discriminator(input_nc=3, ndf=self.ch, n_layers=7).to(self.device)
         self.disLA = Discriminator(input_nc=3, ndf=self.ch, n_layers=5).to(self.device)
