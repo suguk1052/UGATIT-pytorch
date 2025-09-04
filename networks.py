@@ -6,7 +6,8 @@ from torch.nn.parameter import Parameter
 class ResnetGenerator(nn.Module):
     def __init__(self, input_nc, output_nc, ngf=64, n_blocks=6,
                  img_height=256, img_width=256, light=False,
-                 style_dim=8, use_ds=False, sigma_f=0.0):
+                 style_dim=8, use_ds=False, sigma_f=0.0,
+                 noise_blocks=None):
         assert(n_blocks >= 0)
         super(ResnetGenerator, self).__init__()
         self.input_nc = input_nc
@@ -19,6 +20,7 @@ class ResnetGenerator(nn.Module):
         self.style_dim = style_dim
         self.use_ds = use_ds
         self.sigma_f = sigma_f
+        self.noise_blocks = n_blocks - 1 if noise_blocks is None else max(0, min(noise_blocks, n_blocks))
 
         DownBlock = []
         DownBlock += [nn.ReflectionPad2d(3),
@@ -124,7 +126,7 @@ class ResnetGenerator(nn.Module):
 
 
         for i in range(self.n_blocks):
-            if self.sigma_f != 0:
+            if self.sigma_f != 0 and i < self.noise_blocks:
                 x = x + torch.randn_like(x) * self.sigma_f
             x = getattr(self, 'UpBlock1_' + str(i+1))(x, gamma, beta)
         out = self.UpBlock2(x)

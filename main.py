@@ -55,6 +55,8 @@ def parse_args():
                         help='enable gradient checkpointing')
     parser.add_argument('--sigma_f', type=float, default=0.0,
                         help='Stddev of noise added before each upsampling block')
+    parser.add_argument('--noise_blocks', type=int, default=None,
+                        help='Number of early residual blocks to inject noise into')
 
     args = parser.parse_args()
     args.img_w = int(args.img_size * args.aspect_ratio)
@@ -85,6 +87,11 @@ def check_args(args):
         raise ValueError('img_size * aspect_ratio must be divisible by 4')
     if args.use_ds and args.style_dim <= 0:
         raise ValueError('style_dim must be positive when use_ds is enabled')
+    if args.noise_blocks is None:
+        args.noise_blocks = args.n_res - 1
+    else:
+        if not (0 <= args.noise_blocks <= args.n_res):
+            raise ValueError('noise_blocks must be between 0 and n_res')
     return args
 
 """main"""
