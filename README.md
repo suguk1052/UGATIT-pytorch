@@ -32,7 +32,7 @@ The results of the paper came from the **Tensorflow code**
        │    ├── www.png
        │    └── ...
        ├── trainB_mask
-       │    ├── zzz.png
+       │    ├── zzz.png (binary mask, 0 = background, 1 = foreground)
        │    ├── www.png
        │    └── ...
        ├── testA
@@ -50,11 +50,13 @@ The results of the paper came from the **Tensorflow code**
 ```
 
 Each `*_mask` directory must mirror the structure of its image counterpart
-and contain single‑channel PNG files with identical filenames. Masks use `0`
-for the foreground object (e.g., shoes) and `1` for background pixels. During
-training the loader concatenates the mask to the RGB image, yielding a
-4‑channel tensor that feeds the SPADE blocks in the generator and
-discriminators.
+and contain single‑channel PNG files with identical filenames. Domain A masks
+store the foreground object (e.g., shoes) as `0` and the background as `1`.
+Domain B masks follow the opposite convention: `0` for background, `1` for
+foreground. The dataloader inverts domain A masks so that internally both
+domains use `1` for foreground and `0` for background. During training the
+loader concatenates the mask to the RGB image, yielding a 4‑channel tensor that
+feeds the SPADE blocks in the generator and discriminators.
 
 ### Domain A preprocessing (optional)
 

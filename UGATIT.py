@@ -146,7 +146,7 @@ class UGATIT(object) :
         """ DataLoader """
         first_transform = ResizeCenterCrop((self.img_size, self.img_w)) if self.center_crop else transforms.Resize((self.img_size, self.img_w))
 
-        def make_transform(train: bool):
+        def make_transform(train: bool, invert_mask: bool):
             def transform(img, mask):
                 img = first_transform(img)
                 mask = first_transform(mask)
@@ -155,19 +155,23 @@ class UGATIT(object) :
                     mask = TF.hflip(mask)
                 img = TF.to_tensor(img)
                 mask = TF.to_tensor(mask)
+                if invert_mask:
+                    mask = 1.0 - mask
                 img = transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))(img)
                 return img, mask
             return transform
 
-        train_transform = make_transform(train=True)
-        test_transform = make_transform(train=False)
+        train_transform_A = make_transform(train=True, invert_mask=True)
+        train_transform_B = make_transform(train=True, invert_mask=False)
+        test_transform_A = make_transform(train=False, invert_mask=True)
+        test_transform_B = make_transform(train=False, invert_mask=False)
 
         self.trainA = ImageMaskFolder(os.path.join('dataset', self.dataset, 'trainA'),
                                       os.path.join('dataset', self.dataset, 'trainA_mask'),
-                                      train_transform)
+                                      train_transform_A)
         self.trainB = ImageMaskFolder(os.path.join('dataset', self.dataset, 'trainB'),
                                       os.path.join('dataset', self.dataset, 'trainB_mask'),
-                                      train_transform)
+                                      train_transform_B)
 
         testA_root = self.testA_dir if self.testA_dir is not None else os.path.join('dataset', self.dataset, 'testA')
         testB_root = self.testB_dir if self.testB_dir is not None else os.path.join('dataset', self.dataset, 'testB')
@@ -179,8 +183,8 @@ class UGATIT(object) :
         if not os.path.isdir(testB_root):
             raise FileNotFoundError(f'Test B directory not found: {testB_root}')
 
-        self.testA = ImageMaskFolder(testA_root, testA_mask_root, test_transform)
-        self.testB = ImageMaskFolder(testB_root, testB_mask_root, test_transform)
+        self.testA = ImageMaskFolder(testA_root, testA_mask_root, test_transform_A)
+        self.testB = ImageMaskFolder(testB_root, testB_mask_root, test_transform_B)
         self.trainA_loader = DataLoader(self.trainA, batch_size=self.batch_size, shuffle=True)
         self.trainB_loader = DataLoader(self.trainB, batch_size=self.batch_size, shuffle=True)
         self.testA_loader = DataLoader(self.testA, batch_size=1, shuffle=False)
