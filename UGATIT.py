@@ -1,7 +1,9 @@
 import time, itertools
 import os
-from dataset import ImageFolder
+import random
+from dataset import ImageFolder, ImageMaskFolder
 from torchvision import transforms
+from torchvision.transforms import functional as TF
 from torch.utils.data import DataLoader
 from networks import *
 from utils import *
@@ -143,33 +145,42 @@ class UGATIT(object) :
     def build_model(self):
         """ DataLoader """
         first_transform = ResizeCenterCrop((self.img_size, self.img_w)) if self.center_crop else transforms.Resize((self.img_size, self.img_w))
-        train_transform = transforms.Compose([
-            first_transform,
-            transforms.RandomHorizontalFlip(),
-            # transforms.Resize((self.img_size + 30, self.img_size+30)),
-            # transforms.RandomCrop(self.img_size),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-        ])
-        test_transform = transforms.Compose([
-            first_transform,
-            transforms.ToTensor(),
-            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-        ])
 
-        self.trainA = ImageFolder(os.path.join('dataset', self.dataset, 'trainA'), train_transform)
-        self.trainB = ImageFolder(os.path.join('dataset', self.dataset, 'trainB'), train_transform)
+        def make_transform(train: bool):
+            def transform(img, mask):
+                img = first_transform(img)
+                mask = first_transform(mask)
+                if train and random.random() > 0.5:
+                    img = TF.hflip(img)
+                    mask = TF.hflip(mask)
+                img = TF.to_tensor(img)
+                mask = TF.to_tensor(mask)
+                img = transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))(img)
+                return img, mask
+            return transform
+
+        train_transform = make_transform(train=True)
+        test_transform = make_transform(train=False)
+
+        self.trainA = ImageMaskFolder(os.path.join('dataset', self.dataset, 'trainA'),
+                                      os.path.join('dataset', self.dataset, 'trainA_mask'),
+                                      train_transform)
+        self.trainB = ImageMaskFolder(os.path.join('dataset', self.dataset, 'trainB'),
+                                      os.path.join('dataset', self.dataset, 'trainB_mask'),
+                                      train_transform)
 
         testA_root = self.testA_dir if self.testA_dir is not None else os.path.join('dataset', self.dataset, 'testA')
         testB_root = self.testB_dir if self.testB_dir is not None else os.path.join('dataset', self.dataset, 'testB')
+        testA_mask_root = os.path.join(os.path.dirname(testA_root), 'testA_mask') if self.testA_dir is not None else os.path.join('dataset', self.dataset, 'testA_mask')
+        testB_mask_root = os.path.join(os.path.dirname(testB_root), 'testB_mask') if self.testB_dir is not None else os.path.join('dataset', self.dataset, 'testB_mask')
 
         if not os.path.isdir(testA_root):
             raise FileNotFoundError(f'Test A directory not found: {testA_root}')
         if not os.path.isdir(testB_root):
             raise FileNotFoundError(f'Test B directory not found: {testB_root}')
 
-        self.testA = ImageFolder(testA_root, test_transform)
-        self.testB = ImageFolder(testB_root, test_transform)
+        self.testA = ImageMaskFolder(testA_root, testA_mask_root, test_transform)
+        self.testB = ImageMaskFolder(testB_root, testB_mask_root, test_transform)
         self.trainA_loader = DataLoader(self.trainA, batch_size=self.batch_size, shuffle=True)
         self.trainB_loader = DataLoader(self.trainB, batch_size=self.batch_size, shuffle=True)
         self.testA_loader = DataLoader(self.testA, batch_size=1, shuffle=False)
@@ -186,10 +197,10 @@ class UGATIT(object) :
                                       img_height=self.img_size, img_width=self.img_w,
                                       light=self.light, style_dim=self.style_dim,
                                       use_ds=self.use_ds).to(self.device)
-        self.disGA = Discriminator(input_nc=3, ndf=self.ch, n_layers=7).to(self.device)
-        self.disGB = Discriminator(input_nc=3, ndf=self.ch, n_layers=7).to(self.device)
-        self.disLA = Discriminator(input_nc=3, ndf=self.ch, n_layers=5).to(self.device)
-        self.disLB = Discriminator(input_nc=3, ndf=self.ch, n_layers=5).to(self.device)
+        self.disGA = Discriminator(input_nc=4, ndf=self.ch, n_layers=7).to(self.device)
+        self.disGB = Discriminator(input_nc=4, ndf=self.ch, n_layers=7).to(self.device)
+        self.disLA = Discriminator(input_nc=4, ndf=self.ch, n_layers=5).to(self.device)
+        self.disLB = Discriminator(input_nc=4, ndf=self.ch, n_layers=5).to(self.device)
 
         """ Define Loss """
         self.L1_loss = nn.L1Loss().to(self.device)
@@ -256,12 +267,19 @@ class UGATIT(object) :
                 trainB_ref_iter = iter(self.trainB_loader)
                 b_ref, _ = trainB_ref_iter.next()
 
-            real_A, real_B = real_A.to(self.device), real_B.to(self.device)
+            real_A = real_A.to(self.device)
+            real_B = real_B.to(self.device)
             b_ref = b_ref.to(self.device)
+
+            mask_A = real_A[:, 3:4, :, :]
+            mask_B = real_B[:, 3:4, :, :]
+            m_ref = b_ref[:, 3:4, :, :]
+            real_A_rgb = real_A[:, :3, :, :]
+            real_B_rgb = real_B[:, :3, :, :]
+            b_ref_rgb = b_ref[:, :3, :, :]
+
             if self.use_spade_adalin:
-                _, _, b_ref_heatmap = self._call(self.genB2A, b_ref)
-                m_ref = norm_01(b_ref_heatmap.detach())
-                s_ref_fg, s_ref_bg = self.style_enc_B(b_ref, m_ref)
+                s_ref_fg, s_ref_bg = self.style_enc_B(b_ref_rgb, m_ref)
             else:
                 s_ref_fg = s_ref_bg = None
 
@@ -271,16 +289,18 @@ class UGATIT(object) :
             s_ref_bg_detach = s_ref_bg.detach() if s_ref_bg is not None else None
             fake_A2B, _, _ = self._call(self.genA2B, real_A, None, s_ref_fg_detach, s_ref_bg_detach)
             fake_B2A, _, _ = self._call(self.genB2A, real_B)
+            fake_A2B_full = torch.cat([fake_A2B, mask_A], dim=1)
+            fake_B2A_full = torch.cat([fake_B2A, mask_B], dim=1)
 
             real_GA_logit, real_GA_cam_logit, _ = self._call(self.disGA, real_A)
             real_LA_logit, real_LA_cam_logit, _ = self._call(self.disLA, real_A)
             real_GB_logit, real_GB_cam_logit, _ = self._call(self.disGB, real_B)
             real_LB_logit, real_LB_cam_logit, _ = self._call(self.disLB, real_B)
 
-            fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
-            fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
-            fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B)
-            fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B)
+            fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A_full)
+            fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A_full)
+            fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B_full)
+            fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B_full)
 
             D_ad_loss_GA = self.MSE_loss(real_GA_logit, torch.ones_like(real_GA_logit).to(self.device)) + self.MSE_loss(fake_GA_logit, torch.zeros_like(fake_GA_logit).to(self.device))
             D_ad_cam_loss_GA = self.MSE_loss(real_GA_cam_logit, torch.ones_like(real_GA_cam_logit).to(self.device)) + self.MSE_loss(fake_GA_cam_logit, torch.zeros_like(fake_GA_cam_logit).to(self.device))
@@ -308,32 +328,32 @@ class UGATIT(object) :
             # Update G
             self.G_optim.zero_grad()
             if self.use_spade_adalin:
-                _, _, b_ref_heatmap = self._call(self.genB2A, b_ref)
-                m_ref = norm_01(b_ref_heatmap.detach())
-                s_ref_fg, s_ref_bg = self.style_enc_B(b_ref, m_ref)
+                s_ref_fg, s_ref_bg = self.style_enc_B(b_ref_rgb, m_ref)
                 fake_A2B, fake_A2B_cam_logit, fake_A2B_heatmap = self._call(self.genA2B, real_A, None, s_ref_fg, s_ref_bg)
             else:
                 fake_A2B, fake_A2B_cam_logit, fake_A2B_heatmap = self._call(self.genA2B, real_A)
             fake_B2A, fake_B2A_cam_logit, fake_B2A_heatmap = self._call(self.genB2A, real_B)
+            fake_A2B_full = torch.cat([fake_A2B, mask_A], dim=1)
+            fake_B2A_full = torch.cat([fake_B2A, mask_B], dim=1)
 
-            fake_A2B2A, _, _ = self._call(self.genB2A, fake_A2B)
+            fake_A2B2A, _, _ = self._call(self.genB2A, fake_A2B_full)
             if self.use_spade_adalin:
-                fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A, None, s_ref_fg, s_ref_bg)
+                fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A_full, None, s_ref_fg, s_ref_bg)
             else:
-                fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A)
+                fake_B2A2B, _, _ = self._call(self.genA2B, fake_B2A_full)
 
             fake_A2A, fake_A2A_cam_logit, real_A_heatmap = self._call(self.genB2A, real_A)
             if self.use_spade_adalin:
-                m_real_B = norm_01(fake_B2A_heatmap.detach())
-                s_real_B_fg, s_real_B_bg = self.style_enc_B(real_B, m_real_B)
+                m_real_B = mask_B
+                s_real_B_fg, s_real_B_bg = self.style_enc_B(real_B_rgb, m_real_B)
                 fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B, None, s_real_B_fg, s_real_B_bg)
             else:
                 fake_B2B, fake_B2B_cam_logit, _ = self._call(self.genA2B, real_B)
 
-            fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A)
-            fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A)
-            fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B)
-            fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B)
+            fake_GA_logit, fake_GA_cam_logit, _ = self._call(self.disGA, fake_B2A_full)
+            fake_LA_logit, fake_LA_cam_logit, _ = self._call(self.disLA, fake_B2A_full)
+            fake_GB_logit, fake_GB_cam_logit, _ = self._call(self.disGB, fake_A2B_full)
+            fake_LB_logit, fake_LB_cam_logit, _ = self._call(self.disLB, fake_A2B_full)
 
             G_ad_loss_GA = self.MSE_loss(fake_GA_logit, torch.ones_like(fake_GA_logit).to(self.device))
             G_ad_cam_loss_GA = self.MSE_loss(fake_GA_cam_logit, torch.ones_like(fake_GA_cam_logit).to(self.device))
@@ -347,32 +367,32 @@ class UGATIT(object) :
             if self.use_spade_adalin:
                 m_fg_A_ref = norm_01(fake_A2B_heatmap.detach())
                 m_fg_B = norm_01(fake_B2A_heatmap.detach())
-                w_fg_B = F.interpolate(m_fg_B, size=real_B.size()[2:], mode='bilinear', align_corners=False)
+                w_fg_B = F.interpolate(m_fg_B, size=real_B_rgb.size()[2:], mode='bilinear', align_corners=False)
 
                 m_fg_A_src = norm_01(real_A_heatmap.detach())
-                m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A.size()[2:], mode='bilinear', align_corners=False)
+                m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A_rgb.size()[2:], mode='bilinear', align_corners=False)
 
-                fake_A2B2A = m_fg_A_up * fake_A2B2A + (1 - m_fg_A_up) * real_A
-                fake_A2A = m_fg_A_up * fake_A2A + (1 - m_fg_A_up) * real_A
+                fake_A2B2A = m_fg_A_up * fake_A2B2A + (1 - m_fg_A_up) * real_A_rgb
+                fake_A2A = m_fg_A_up * fake_A2A + (1 - m_fg_A_up) * real_A_rgb
 
-                G_recon_loss_A = torch.mean(torch.abs(m_fg_A_up * (fake_A2B2A - real_A)))
-                G_recon_loss_B = torch.mean(torch.abs(w_fg_B * (fake_B2A2B - real_B)))
+                G_recon_loss_A = torch.mean(torch.abs(m_fg_A_up * (fake_A2B2A - real_A_rgb)))
+                G_recon_loss_B = torch.mean(torch.abs(w_fg_B * (fake_B2A2B - real_B_rgb)))
 
-                G_identity_loss_A = torch.mean(torch.abs(m_fg_A_up * (fake_A2A - real_A)))
-                G_identity_loss_B = torch.mean(torch.abs(w_fg_B * (fake_B2B - real_B)))
+                G_identity_loss_A = torch.mean(torch.abs(m_fg_A_up * (fake_A2A - real_A_rgb)))
+                G_identity_loss_B = torch.mean(torch.abs(w_fg_B * (fake_B2B - real_B_rgb)))
 
                 s_fake_fg, s_fake_bg = self.style_enc_B(fake_A2B, m_fg_A_ref)
                 L_style = torch.mean(torch.abs(s_fake_fg - s_ref_fg)) + \
                           torch.mean(torch.abs(s_fake_bg - s_ref_bg))
                 m_bg_A = 1 - m_fg_A_up
                 blur_fake = F.avg_pool2d(fake_A2B * m_bg_A, 7, 1, 3)
-                blur_ref = F.avg_pool2d(b_ref * m_bg_A, 7, 1, 3)
+                blur_ref = F.avg_pool2d(b_ref_rgb * m_bg_A, 7, 1, 3)
                 L_lp = torch.mean(torch.abs(blur_fake - blur_ref))
             else:
-                G_recon_loss_A = self.L1_loss(fake_A2B2A, real_A)
-                G_recon_loss_B = self.L1_loss(fake_B2A2B, real_B)
-                G_identity_loss_A = self.L1_loss(fake_A2A, real_A)
-                G_identity_loss_B = self.L1_loss(fake_B2B, real_B)
+                G_recon_loss_A = self.L1_loss(fake_A2B2A, real_A_rgb)
+                G_recon_loss_B = self.L1_loss(fake_B2A2B, real_B_rgb)
+                G_identity_loss_A = self.L1_loss(fake_A2A, real_A_rgb)
+                G_identity_loss_B = self.L1_loss(fake_B2B, real_B_rgb)
                 L_style = torch.tensor(0.0, device=self.device)
                 L_lp = torch.tensor(0.0, device=self.device)
 
@@ -439,31 +459,36 @@ class UGATIT(object) :
                         except:
                             trainB_iter = iter(self.trainB_loader)
                             real_B, _ = trainB_iter.next()
-                        real_A, real_B = real_A.to(self.device), real_B.to(self.device)
+                        real_A = real_A.to(self.device)
+                        real_B = real_B.to(self.device)
+                        mask_A = real_A[:, 3:4, :, :]
+                        mask_B = real_B[:, 3:4, :, :]
+                        real_A_rgb = real_A[:, :3, :, :]
+                        real_B_rgb = real_B[:, :3, :, :]
 
                         if self.use_spade_adalin:
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
-                            m_ref = norm_01(fake_B2A_heatmap.detach())
-                            s_ref_fg, s_ref_bg = self.style_enc_B(real_B, m_ref)
+                            m_ref = mask_B
+                            s_ref_fg, s_ref_bg = self.style_enc_B(real_B_rgb, m_ref)
                             fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, None, s_ref_fg, s_ref_bg)
-                            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, None, s_ref_fg, s_ref_bg)
+                            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(torch.cat([fake_A2B, mask_A], dim=1))
+                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(torch.cat([fake_B2A, mask_B], dim=1), None, s_ref_fg, s_ref_bg)
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
                             fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, None, s_ref_fg, s_ref_bg)
                         else:
                             fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
-                            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A)
+                            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(torch.cat([fake_A2B, mask_A], dim=1))
+                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(torch.cat([fake_B2A, mask_B], dim=1))
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
                             fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
 
                         m_fg_A_src = norm_01(fake_A2A_heatmap.detach())
-                        m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A.size()[2:], mode='bilinear', align_corners=False)
-                        fake_A2B2A = m_fg_A_up * fake_A2B2A + (1 - m_fg_A_up) * real_A
-                        fake_A2A = m_fg_A_up * fake_A2A + (1 - m_fg_A_up) * real_A
+                        m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A_rgb.size()[2:], mode='bilinear', align_corners=False)
+                        fake_A2B2A = m_fg_A_up * fake_A2B2A + (1 - m_fg_A_up) * real_A_rgb
+                        fake_A2A = m_fg_A_up * fake_A2A + (1 - m_fg_A_up) * real_A_rgb
 
-                        A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A[0]))),
+                        A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A_rgb[0]))),
                                                                    cam(tensor2numpy(fake_A2A_heatmap[0]), (self.img_size, self.img_w)),
                                                                    RGB2BGR(tensor2numpy(denorm(fake_A2A[0]))),
                                                                    cam(tensor2numpy(fake_A2B_heatmap[0]), (self.img_size, self.img_w)),
@@ -471,7 +496,7 @@ class UGATIT(object) :
                                                                    cam(tensor2numpy(fake_A2B2A_heatmap[0]), (self.img_size, self.img_w)),
                                                                    RGB2BGR(tensor2numpy(denorm(fake_A2B2A[0])))), 0)), 1)
 
-                        B2A = np.concatenate((B2A, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_B[0]))),
+                        B2A = np.concatenate((B2A, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_B_rgb[0]))),
                                                                    cam(tensor2numpy(fake_B2B_heatmap[0]), (self.img_size, self.img_w)),
                                                                    RGB2BGR(tensor2numpy(denorm(fake_B2B[0]))),
                                                                    cam(tensor2numpy(fake_B2A_heatmap[0]), (self.img_size, self.img_w)),
@@ -491,31 +516,36 @@ class UGATIT(object) :
                         except:
                             testB_iter = iter(self.testB_loader)
                             real_B, _ = testB_iter.next()
-                        real_A, real_B = real_A.to(self.device), real_B.to(self.device)
+                        real_A = real_A.to(self.device)
+                        real_B = real_B.to(self.device)
+                        mask_A = real_A[:, 3:4, :, :]
+                        mask_B = real_B[:, 3:4, :, :]
+                        real_A_rgb = real_A[:, :3, :, :]
+                        real_B_rgb = real_B[:, :3, :, :]
 
                         if self.use_spade_adalin:
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
-                            m_ref = norm_01(fake_B2A_heatmap.detach())
-                            s_ref_fg, s_ref_bg = self.style_enc_B(real_B, m_ref)
+                            m_ref = mask_B
+                            s_ref_fg, s_ref_bg = self.style_enc_B(real_B_rgb, m_ref)
                             fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A, None, s_ref_fg, s_ref_bg)
-                            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A, None, s_ref_fg, s_ref_bg)
+                            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(torch.cat([fake_A2B, mask_A], dim=1))
+                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(torch.cat([fake_B2A, mask_B], dim=1), None, s_ref_fg, s_ref_bg)
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
                             fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B, None, s_ref_fg, s_ref_bg)
                         else:
                             fake_A2B, _, fake_A2B_heatmap = self.genA2B(real_A)
                             fake_B2A, _, fake_B2A_heatmap = self.genB2A(real_B)
-                            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(fake_A2B)
-                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(fake_B2A)
+                            fake_A2B2A, _, fake_A2B2A_heatmap = self.genB2A(torch.cat([fake_A2B, mask_A], dim=1))
+                            fake_B2A2B, _, fake_B2A2B_heatmap = self.genA2B(torch.cat([fake_B2A, mask_B], dim=1))
                             fake_A2A, _, fake_A2A_heatmap = self.genB2A(real_A)
                             fake_B2B, _, fake_B2B_heatmap = self.genA2B(real_B)
 
                         m_fg_A_src = norm_01(fake_A2A_heatmap.detach())
-                        m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A.size()[2:], mode='bilinear', align_corners=False)
-                        fake_A2B2A = m_fg_A_up * fake_A2B2A + (1 - m_fg_A_up) * real_A
-                        fake_A2A = m_fg_A_up * fake_A2A + (1 - m_fg_A_up) * real_A
+                        m_fg_A_up = F.interpolate(m_fg_A_src, size=real_A_rgb.size()[2:], mode='bilinear', align_corners=False)
+                        fake_A2B2A = m_fg_A_up * fake_A2B2A + (1 - m_fg_A_up) * real_A_rgb
+                        fake_A2A = m_fg_A_up * fake_A2A + (1 - m_fg_A_up) * real_A_rgb
 
-                        A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A[0]))),
+                        A2B = np.concatenate((A2B, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_A_rgb[0]))),
                                                                    cam(tensor2numpy(fake_A2A_heatmap[0]), (self.img_size, self.img_w)),
                                                                    RGB2BGR(tensor2numpy(denorm(fake_A2A[0]))),
                                                                    cam(tensor2numpy(fake_A2B_heatmap[0]), (self.img_size, self.img_w)),
@@ -523,7 +553,7 @@ class UGATIT(object) :
                                                                    cam(tensor2numpy(fake_A2B2A_heatmap[0]), (self.img_size, self.img_w)),
                                                                    RGB2BGR(tensor2numpy(denorm(fake_A2B2A[0])))), 0)), 1)
 
-                        B2A = np.concatenate((B2A, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_B[0]))),
+                        B2A = np.concatenate((B2A, np.concatenate((RGB2BGR(tensor2numpy(denorm(real_B_rgb[0]))),
                                                                    cam(tensor2numpy(fake_B2B_heatmap[0]), (self.img_size, self.img_w)),
                                                                    RGB2BGR(tensor2numpy(denorm(fake_B2B[0]))),
                                                                    cam(tensor2numpy(fake_B2A_heatmap[0]), (self.img_size, self.img_w)),

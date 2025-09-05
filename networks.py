@@ -187,6 +187,10 @@ class ResnetGenerator(nn.Module):
             self.style_proj = nn.Conv2d(self.style_nc, 256, 1, 1, 0)
 
     def forward(self, input, z=None, s_fg=None, s_bg=None):
+        mask = None
+        if input.size(1) > 3:
+            mask = input[:, 3:4, :, :]
+            input = input[:, :3, :, :]
         x = self.DownBlock(input)
 
         gap = torch.nn.functional.adaptive_avg_pool2d(x, 1)
@@ -205,17 +209,30 @@ class ResnetGenerator(nn.Module):
 
         heatmap = torch.sum(x, dim=1, keepdim=True)
 
-        if self.use_spade_adalin and s_fg is not None and s_bg is not None:
-            s_fg_map = self.style_proj(s_fg.unsqueeze(-1).unsqueeze(-1))
-            s_fg_map = s_fg_map.expand(-1, -1, x.size(2), x.size(3))
-            s_bg_map = self.style_proj(s_bg.unsqueeze(-1).unsqueeze(-1))
-            s_bg_map = s_bg_map.expand(-1, -1, x.size(2), x.size(3))
-            m = norm_01(heatmap)
-            m = F.interpolate(m, size=x.size()[2:], mode='bilinear', align_corners=False)
-            s_mix = m * s_fg_map + (1 - m) * s_bg_map
-            cond = torch.cat([s_mix, m], dim=1)
+        if mask is not None:
+            m = F.interpolate(mask, size=x.size()[2:], mode='bilinear', align_corners=False)
+            heatmap = m
+            if self.use_spade_adalin and s_fg is not None and s_bg is not None:
+                s_fg_map = self.style_proj(s_fg.unsqueeze(-1).unsqueeze(-1))
+                s_fg_map = s_fg_map.expand(-1, -1, x.size(2), x.size(3))
+                s_bg_map = self.style_proj(s_bg.unsqueeze(-1).unsqueeze(-1))
+                s_bg_map = s_bg_map.expand(-1, -1, x.size(2), x.size(3))
+                s_mix = m * s_fg_map + (1 - m) * s_bg_map
+                cond = torch.cat([s_mix, m], dim=1)
+            else:
+                cond = None
         else:
-            cond = None
+            if self.use_spade_adalin and s_fg is not None and s_bg is not None:
+                s_fg_map = self.style_proj(s_fg.unsqueeze(-1).unsqueeze(-1))
+                s_fg_map = s_fg_map.expand(-1, -1, x.size(2), x.size(3))
+                s_bg_map = self.style_proj(s_bg.unsqueeze(-1).unsqueeze(-1))
+                s_bg_map = s_bg_map.expand(-1, -1, x.size(2), x.size(3))
+                m = norm_01(heatmap)
+                m = F.interpolate(m, size=x.size()[2:], mode='bilinear', align_corners=False)
+                s_mix = m * s_fg_map + (1 - m) * s_bg_map
+                cond = torch.cat([s_mix, m], dim=1)
+            else:
+                cond = None
 
         if self.light:
             x_ = torch.nn.functional.adaptive_avg_pool2d(x, 1)

@@ -20,22 +20,41 @@ The results of the paper came from the **Tensorflow code**
 ├── dataset
    └── YOUR_DATASET_NAME
        ├── trainA
-            ├── xxx.jpg (name, format doesn't matter)
-            ├── yyy.png
-            └── ...
+       │    ├── xxx.jpg (name, format doesn't matter)
+       │    ├── yyy.png
+       │    └── ...
+       ├── trainA_mask
+       │    ├── xxx.png (binary mask, 0 = foreground, 1 = background)
+       │    ├── yyy.png
+       │    └── ...
        ├── trainB
-            ├── zzz.jpg
-            ├── www.png
-            └── ...
+       │    ├── zzz.jpg
+       │    ├── www.png
+       │    └── ...
+       ├── trainB_mask
+       │    ├── zzz.png
+       │    ├── www.png
+       │    └── ...
        ├── testA
-            ├── aaa.jpg
-            ├── bbb.png
-            └── ...
+       │    ├── aaa.jpg
+       │    ├── bbb.png
+       │    └── ...
+       ├── testA_mask
+       │    ├── aaa.png
+       │    ├── bbb.png
+       │    └── ...
        └── testB
             ├── ccc.jpg
             ├── ddd.png
             └── ...
 ```
+
+Each `*_mask` directory must mirror the structure of its image counterpart
+and contain single‑channel PNG files with identical filenames. Masks use `0`
+for the foreground object (e.g., shoes) and `1` for background pixels. During
+training the loader concatenates the mask to the RGB image, yielding a
+4‑channel tensor that feeds the SPADE blocks in the generator and
+discriminators.
 
 ### Domain A preprocessing (optional)
 
